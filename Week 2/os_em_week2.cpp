@@ -19,7 +19,10 @@
 #include <map> // mapping
 #include <algorithm> // For std::transform
 #include <functional> // For std::function
-#include <unistd.h> // Sleep
+#include <unistd.h>
+#include <windows.h>
+#include <thread>  // For std::this_thread::sleep_for
+#include <conio.h> // For _kbhit and _getch
 
 using namespace std;
 
@@ -67,6 +70,23 @@ public:
         // Reset to default color
         cout << "\033[0m";
         cout << "Enter a command: ";
+    }
+
+    // Loading Bar Animation [Marquee Console]
+    static void printLoadingBar(int length)
+    {
+        system("cls"); // Clear the console
+
+        cout << "["; // Start of the loading bar
+        for (int i = 0; i < length; i++)
+        {
+            cout << "[]"; // Print the filled part
+        }
+        for (int i = length; i < 10; i++)
+        {                 // Assuming max size of 10 for the loading bar
+            cout << "  "; // Print the unfilled part
+        }
+        cout << "]" << endl; // End of the loading bar
     }
 };
 
@@ -121,6 +141,97 @@ public:
         // DO SOMETHING HERE
     }
 
+    static void marqueeConsole()
+    {
+        bool isExit = false;
+        string userInput;
+
+        while (!isExit)
+        {
+            // Load to X
+            for (int i = 1; i <= 10; i++)
+            {
+                Interfaces::printLoadingBar(i);
+                cout << " Enter a command: " << userInput << flush; 
+
+                if (_kbhit()) 
+                {
+                    char ch = _getch(); // Get the pressed key
+
+                    if (ch == 8) // Backspace
+                    {
+                        if (!userInput.empty())
+                        {
+                            userInput.pop_back(); 
+                            cout << "\b \b";      
+                        }
+                    }
+                    else if (ch == 13) 
+                    {
+                        if (userInput == "q" || userInput == "Q") 
+                        {
+                            isExit = true;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        userInput += ch; 
+                        cout << ch;      
+                    }
+                }
+                Sleep(1); 
+            }
+
+            if (isExit)
+            {
+                system("cls");
+                Interfaces::displayHeader();
+                Interfaces::displayMenu();
+                break;
+            }
+
+            // Reverse of Loading Animation
+            for (int i = 9; i >= 1; i--)
+            {
+                Interfaces::printLoadingBar(i);
+                cout << " Enter a command: " << userInput << flush; // Display the current user input
+
+                if (_kbhit()) // Check if a key has been pressed
+                {
+                    char ch = _getch(); // Get the pressed key
+
+                    if (ch == 8) // Backspace
+                    {
+                        if (!userInput.empty())
+                        {
+                            userInput.pop_back(); // Remove the last character
+                            cout << "\b \b";      // Erase the last character from the console
+                        }
+                    }
+                    else if (ch == 13) // Enter key
+                    {
+                        if (userInput == "q" || userInput == "Q") // Check if the input is 'q' or 'Q'
+                        {
+                            isExit = true;
+                            break;
+                        }
+                        // Handle other commands or input processing here if needed
+                    }
+                    else
+                    {
+                        userInput += ch; // Append the character to the user input
+                        cout << ch;      // Display the character
+                    }
+                }
+                Sleep(1); // Sleep for 200 milliseconds
+            }
+        }
+        system("cls");
+        Interfaces::displayHeader();
+        Interfaces::displayMenu();
+    }
+
     // Executer
 
     static void execute(const string &command)
@@ -136,6 +247,8 @@ public:
             {"scheduler-test", Commands::schedulerTest},
             {"scheduler-stop", Commands::schedulerStop},
             {"report-util", Commands::reportUtil},
+            // Marque Console Sampler
+            {"marquee-console", Commands::marqueeConsole},
             // Manual Exception, for Debugging / Checking Error Hnadling in Clock Cycle
             {"throw-exception", []() { throw runtime_error("OS Error 000: Sample Exception Triggered"); }}
         };
@@ -227,7 +340,7 @@ class ClockCycle {
                     // Display Error Message then Refresh after X seconds
                     std::cerr << e.what() << '\n';
                     cout << "Refreshing in 3 seconds...\n";
-                    sleep(3);
+                    Sleep(3);
                     system("cls");
                     Interfaces::displayHeader();
                     Interfaces::displayMenu();
