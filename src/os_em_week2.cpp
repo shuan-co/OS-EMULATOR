@@ -22,6 +22,8 @@ using namespace std;
 #include "commands.h"
 #include "systemos.h"
 #include "clockcycle.h"
+#include "process.h"
+#include "current_state.h"
 
 // Emulator
 int main()
