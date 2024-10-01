@@ -12,6 +12,8 @@
 #include <windows.h>
 #include <thread>
 #include <conio.h>
+#include <array>
+#include <thread>
 
 // Operating System Libraries
 
@@ -33,9 +35,105 @@ class Commands
 private:
     static ProcessManager processManager;
 
-public:
-    //  Implemented Functions
+    static string currentUserInputCommand;
+    static bool isExit;
+    static array<string, 3> commandHistory;
+    static int historyIndex;
 
+    static void storeCommandInHistory(const string &command) {
+        commandHistory[historyIndex] = command; 
+        historyIndex = (historyIndex + 1) % 3; 
+    }
+    
+    static bool keyboardPolling() {
+        if (_kbhit()) {
+            char ch = _getch();
+
+            if (ch == '\r') {
+                std::cout << "\n"; 
+
+                if (currentUserInputCommand == "exit") {
+                    currentUserInputCommand.clear(); 
+                    return true;                     
+                }
+
+                if (!currentUserInputCommand.empty()) {
+                    storeCommandInHistory(currentUserInputCommand);
+                    currentUserInputCommand.clear(); 
+                }
+            }
+            else if (ch == '\b') {
+                if (!currentUserInputCommand.empty()) {
+                    currentUserInputCommand.pop_back(); 
+                    std::cout << "\b \b";              
+                }
+            }
+            else if (isprint(ch)) {
+                currentUserInputCommand += ch;
+            }
+        }
+        return false; 
+    }
+
+    static void runMarqueeAnimation(const std::string &marqueeText, int &x, int &y, int currentWidth, int currentHeight)
+    {
+        bool movingDown = true;
+        bool movingRight = true;
+
+        while (!isExit)
+        {
+            Sleep(60); 
+            Interfaces::marqueeConsoleAnimation(x, y, marqueeText);
+            Interfaces::displayUserGetCommand(Commands::currentUserInputCommand, currentHeight - 6);
+            Interfaces::displayCommandHistory(Commands::commandHistory, Commands::historyIndex, currentHeight - 6);
+            Interfaces::resetCursorPositionMarquee(Commands::currentUserInputCommand, currentHeight - 6);
+            
+            if (movingDown) {
+                if (y < currentHeight - 10) {
+                    y++; 
+                } else {
+                    movingDown = false; 
+                    y--;
+                }
+            } else {
+                if (y > 0) {
+                    y--; 
+                }
+                else {
+                    movingDown = true;
+                    y++;
+                }
+            }
+
+            if (movingRight) {
+                if (x < currentWidth - marqueeText.length() - 1) {
+                    x++; 
+                }
+                else {
+                    movingRight = false;
+                }
+            } else {
+                if (x > 0) {
+                    x--; 
+                } else {
+                    movingRight = true; 
+                }
+            }
+        }
+    }
+
+    static void runKeyboardPolling()
+    {
+        while (!isExit)
+        {
+            Sleep(15); // Polling Rate
+            isExit = Commands::keyboardPolling();
+        }
+    }
+
+public:
+
+    //  Implemented Functions
     static void clear (const std::string& args, ProgramState& state)
     {
         system("cls");
@@ -144,58 +242,29 @@ public:
     // Marquee Console Simulator
     static void marqueeConsole(const std::string &args, ProgramState &state)
     {
-        bool isExit = false;
-        string userInput;
+        isExit = false; 
+        const std::string marqueeText = "Hello world in marquee!";
+        int currentWidth, currentHeight;
+        Interfaces::GetConsoleSize(currentWidth, currentHeight);
 
-        while (!isExit)
-        {
-            // Load to X
-            for (int i = 1; i <= 10; i++)
-            {
-                Interfaces::printLoadingBar(i);
-                cout << "Enter a command [Q Enter: Exit]: " << userInput << flush;
+        int y = 0;
+        int x = 0;
 
-                if (_kbhit())
-                {
-                    char ch = _getch(); 
+        std::thread marqueeThread(runMarqueeAnimation, 
+                std::ref(marqueeText), std::ref(x), 
+                std::ref(y), currentWidth, currentHeight);
+        std::thread pollingThread(runKeyboardPolling);
 
-                    if (ch == 8) 
-                    {
-                        if (!userInput.empty())
-                        {
-                            userInput.pop_back();
-                            cout << "\b \b";
-                        }
-                    }
-                    else if (ch == 13)
-                    {
-                        if (userInput == "q" || userInput == "Q")
-                        {
-                            isExit = true;
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        userInput += ch;
-                        cout << ch;
-                    }
-                }
-                Sleep(1);
-            }
+        marqueeThread.join();
+        pollingThread.join();
 
-            if (isExit)
-            {
-                system("cls");
-                Interfaces::displayHeader();
-                Interfaces::displayMenu();
-                break;
-            }
-        }
+        Commands::currentUserInputCommand.clear();
+        system("cls");
+        Interfaces::displayHeader();
+        Interfaces::displayMenu();
     }
 
     // Executer
-
     static void execute(const string& command, ProgramState& programState)
     {
         /*
@@ -242,5 +311,10 @@ public:
 };
 
 ProcessManager Commands::processManager;
+string Commands::currentUserInputCommand = "";
+bool Commands::isExit = false;
 
+// Initialize command history array and index
+std::array<std::string, 3> Commands::commandHistory = {"", "", ""};
+int Commands::historyIndex = 0;
 #endif

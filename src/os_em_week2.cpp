@@ -28,13 +28,11 @@ using namespace std;
 #include "process.h"
 #include "current_state.h"
 
-#include <windows.h>
-
 // Emulator
+
 
 int main()
 {
-    system("cls");
     // Execute Emulated CSOPESY OS
     ClockCycle::powerOn();
     return 0;

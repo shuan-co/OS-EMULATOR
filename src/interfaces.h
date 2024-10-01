@@ -5,9 +5,11 @@
 // Libraries
 
 #include <iostream>
+#include <string.h>
 #include <windows.h>
 #include <iomanip>
 #include <ctime>
+#include <array>
 
 using namespace std;
 
@@ -172,6 +174,8 @@ class Interfaces
             }
         }
 
+        static string enterCommandMarqueeText;
+
     public:
 
         static void displayHeader()
@@ -198,22 +202,6 @@ class Interfaces
             // Reset to default color
             cout << "\033[0m";
             cout << "Enter a command: ";
-        }
-
-        static void printLoadingBar(int length)
-        {
-            system("cls");
-
-            cout << "["; 
-            for (int i = 0; i < length; i++)
-            {
-                cout << "[]"; 
-            }
-            for (int i = length; i < 10; i++)
-            {                 
-                cout << "  "; 
-            }
-            cout << "]" << endl; 
         }
 
         static void displaySMIHeader()
@@ -409,6 +397,74 @@ class Interfaces
             SetCursorPosition(0, yOffset + 5 + numProcesses + 1);
             displayText("Press any key to return...");
         }
+
+        static void displayMarqueeHeader(){
+            cout << "*********************************" << endl;
+            cout << "* Displaying a marquee console! *" << endl;
+            cout << "*********************************" << endl;
+        }
+        
+        static void marqueeConsoleAnimation(const int x, 
+                                            const int y, 
+                                            const string marqueeText = 
+                                                "Hello world in marquee!"){
+            system("cls");
+
+            // Get Console Size:
+            int currentWidth, currentHeight;
+            GetConsoleSize(currentWidth, currentHeight);
+            SetConsoleSize(currentWidth, currentHeight);
+
+            SetCursorPosition(0, 0);
+            displayMarqueeHeader();
+            
+            SetCursorPosition(x + 1, y + 3);
+            displayText(marqueeText);
+        }
+        
+        static void displayUserGetCommand(const string userCommand, const int yOffset = 0){
+            SetCursorPosition(0, yOffset);
+            cout << "Enter a command for MARQUEE_CONSOLE: " << userCommand;
+        }
+
+        static void displayCommandHistory(const array<string, 3> &commands, int historyIndex, const int yOffset = 0)
+        {
+            SetCursorPosition(0, yOffset);
+            int startIdx = (historyIndex - 1 + 3) % 3;
+            cout << "\n";
+
+            for (int i = 0; i < 3; ++i)
+            {
+                int idx = (startIdx - i + 3) % 3; 
+                if (!commands.at(idx).empty())
+                {
+                    std::cout << "Command processed in MARQUEE_CONSOLE: " << commands.at(idx) << "\n";
+                }
+            }
+        }
+
+        static void resetCursorPositionMarquee(const string userCommand, const int yOffset = 0)
+        {
+            SetCursorPosition(enterCommandMarqueeText.length() + userCommand.length(), yOffset);
+        }
+
+        static void GetConsoleSize(int &width, int &height)
+        {
+            HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+            CONSOLE_SCREEN_BUFFER_INFO csbi;
+
+            if (GetConsoleScreenBufferInfo(hConsole, &csbi))
+            {
+                width = csbi.dwSize.X;
+                height = csbi.dwSize.Y;
+            }
+            else
+            {
+                std::cerr << "Error retrieving console size." << std::endl;
+            }
+        }
 };
+
+string Interfaces::enterCommandMarqueeText = "Enter a command for MARQUEE_CONSOLE: ";
 
 #endif

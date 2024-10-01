@@ -2,14 +2,14 @@
 #define SYSTEMOS_H
 
 // Libraries
-
 #include <string.h>
 #include <algorithm>
+#include <conio.h>
+#include <iostream>
+#include <array>
 
 // Operating System Libraries
-
 #include "interfaces.h"
-#include "commands.h"
 #include "current_state.h"
 
 using namespace std;
@@ -20,33 +20,35 @@ using namespace std;
 
 // System Class Definition
 
+class Commands;
+
 class SystemOS
 {
 private:
-    // Get Terminal Syntax Input
     static ProgramState programState;
 
     static string getInput()
     {
         string inputSyntax;
-
-        // Get entire line of input
         std::getline(cin, inputSyntax);
 
-        // Lowercase
+        // Convert to lowercase
         transform(inputSyntax.begin(), inputSyntax.end(), inputSyntax.begin(), ::tolower);
-
         return inputSyntax;
     }
 
+
 public:
-    static bool execute(const string& type) {
-        if (type == "cmd") {
+    static bool execute(const string &type)
+    {
+        if (type == "cmd")
+        {
             string input = getInput();
 
-            if (input == "exit") {
-                if (programState.getContext() == Context::PROCESS_SCREEN) {
-                    // Galing process to menu
+            if (input == "exit")
+            {
+                if (programState.getContext() == Context::PROCESS_SCREEN)
+                {
                     programState.setContext(Context::MAIN_MENU);
                     programState.setCurrentProcess("");
                     system("cls");
@@ -54,20 +56,21 @@ public:
                     Interfaces::displayMenu();
                     return true;
                 }
-                else {
-                    // Galing menu to terminate
+                else
+                {
                     return false;
                 }
             }
 
-            // Pinagbawalan ko user to use any other command besides exit medyo hard coded pa siya
-            if (programState.getContext() == Context::PROCESS_SCREEN) {
+            if (programState.getContext() == Context::PROCESS_SCREEN)
+            {
                 if (input == "clear" || input == "initialize" || input == "screen" ||
                     input == "scheduler-test" || input == "scheduler-stop" ||
                     input == "report-util" || input == "marquee-console" ||
-                    input == "throw-exception" || input == "opesyos-smi") {
+                    input == "throw-exception" || input == "opesyos-smi")
+                {
                     std::cout << "Command not recognized. Please try again.\n";
-                    return true; 
+                    return true;
                 }
             }
 
@@ -77,11 +80,14 @@ public:
         return true;
     }
 
-    static ProgramState& getProgramState() {
+    static ProgramState &getProgramState()
+    {
         return programState;
     }
+
 };
 
+// Initialize static members outside the class
 ProgramState SystemOS::programState;
 
 #endif
