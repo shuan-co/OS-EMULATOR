@@ -9,6 +9,9 @@
     Current Task Iteration: Week 2 - Group Homework - Setting up your OS emulator
 */
 
+#define UNICODE
+#define _UNICODE
+
 using namespace std;
 
 // Hierarchy of Classes
@@ -25,10 +28,14 @@ using namespace std;
 #include "process.h"
 #include "current_state.h"
 
+#include <windows.h>
+
 // Emulator
+
 int main()
 {
+    system("cls");
     // Execute Emulated CSOPESY OS
-    ClockCycle::powerOn(); 
+    ClockCycle::powerOn();
     return 0;
-}
+}   

@@ -18,6 +18,7 @@
 #include "interfaces.h"
 #include "process.h"
 #include "current_state.h"
+#include "dummyProcess.h"
 
 
 using namespace std;
@@ -104,8 +105,44 @@ public:
         // DO SOMETHING HERE
     }
 
+    // CSOPESY-SMI [NVIDIA-SMI]
+    static void opesyosSMI(const std::string &args, ProgramState &state)
+    {
+
+        // Dummy Process Data
+        system("cls");
+        DummyProcess stack[5];
+        string processNames[5] = {"nt.CBS_cw5n1h2txyewy\\SearchHost.exe",
+                                  "C:\\Program Files (x86)\\steamapps\\common\\wallpaper_engine\\wallpaper64.exe",
+                                  "C:\\Program Files\\NVIDIA Corporation\\GeForce Experience\\NVIDIA Share.exe",
+                                  "C:\\Program Files (x86)\\Steam\\bin\\cef\\cef.win7x64\\steamwebhelper.exe",
+                                  "C:\\Users\\User\\AppData\\Local\\Microsoft\\Launcher\\VerylongVerylongVerylongVerylongVerylong.PowerLauncher.exe"};
+        for (int i = 0; i < 5; i++)
+        {
+            stack[i].gpu = i;
+            stack[i].gi = i + 10;    
+            stack[i].ci = i + 20;    
+            stack[i].pid = 1000 + i;
+            stack[i].type = "C+G";
+            stack[i].processName = processNames[i]; 
+            stack[i].gpuMemory = "N/A";            
+        }
+
+        // Display 
+        Interfaces::displaySMIHeader();
+        Interfaces::displayProcessInfo(5, stack);
+
+        // Exit
+
+        std::cin.get();
+
+        system("cls");
+        Interfaces::displayHeader();
+        Interfaces::displayMenu();
+    }
+
     // Marquee Console Simulator
-    static void marqueeConsole(const std::string& args, ProgramState& state)
+    static void marqueeConsole(const std::string &args, ProgramState &state)
     {
         bool isExit = false;
         string userInput;
@@ -164,7 +201,7 @@ public:
         /*
             Create Association Mapping between string command syntax and static void function executions
         */
-        static const std::map<std::string, std::function<void(const string&, ProgramState&)>> commandMap = {
+        static const std::map<std::string, std::function<void(const string &, ProgramState &)>> commandMap = {
             {"clear", Commands::clear},
             {"exit", Commands::exit},
             {"initialize", Commands::initialize},
@@ -172,13 +209,15 @@ public:
             {"scheduler-test", Commands::schedulerTest},
             {"scheduler-stop", Commands::schedulerStop},
             {"report-util", Commands::reportUtil},
+            {"opesyos-smi", Commands::opesyosSMI},
+            // OPESYOS SMI [NVIDIA-SMI]
             // Marquee Console Sampler
             {"marquee-console", Commands::marqueeConsole},
             // Manual Exception, for Debugging / Checking Error Handling in Clock Cycle
-            {"throw-exception", [](const string&, ProgramState&)
+            {"throw-exception", [](const string &, ProgramState &)
              {
                  throw runtime_error("OS Error 000: Sample Exception Triggered");
-             }} };
+             }}};
 
         /*
             Check if command key can be found in the mapping
