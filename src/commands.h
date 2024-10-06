@@ -131,6 +131,15 @@ private:
         }
     }
 
+    static void runSchedulerTest()
+    {
+        for (int i = 0; i < 100; i++)
+        {
+            processManager.createProcess("Process " + std::to_string(i));
+            Sleep(1000); // Sleep for 1 second
+        }
+    }
+
 public:
 
     //  Implemented Functions
@@ -185,16 +194,17 @@ public:
         }
     }
 
-    static void schedulerTest(const std::string& args, ProgramState& state)
+    static void schedulerTest(const std::string &args, ProgramState &state)
     {
-        cout << "scheduler-test command recognized. Doing Something...\n";
-        // DO SOMETHING HERE
+        std::thread schedulerThread(runSchedulerTest); 
+        schedulerThread.detach();                     
     }
 
     static void schedulerStop(const std::string& args, ProgramState& state)
     {
         cout << "scheduler-stop command recognized. Doing Something...\n";
         // DO SOMETHING HERE
+        processManager.displayAllProcesses();
     }
 
     static void reportUtil(const std::string& args, ProgramState& state)
