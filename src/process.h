@@ -128,7 +128,7 @@ private:
                 processPtr = processQueue.getProcess();
             }
 
-            while (processPtr->currentLine <= processPtr->totalLines)
+            while (processPtr->currentLine < processPtr->totalLines)
             {
                 processPtr->printLogs(cpuId); 
                 {
@@ -204,7 +204,7 @@ public:
         if (processes.find(name) == processes.end())
         {
             int newPid = processes.size();
-            Process newProcess{name, 1, 100, std::time(nullptr), newPid};
+            Process newProcess{name, 0, 100, std::time(nullptr), newPid};
             processes[name] = newProcess;
             FCFSScheduler::addProcessToQueue(&processes[name]); 
             return true;
