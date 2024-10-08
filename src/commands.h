@@ -133,7 +133,7 @@ private:
 
     static void runSchedulerTest()
     {
-        for (int i = 0; i < 100; i++)
+        for (int i = 0; i < 10; i++)
         {
             processManager.createProcess("Process " + std::to_string(i));
             Sleep(1000); // Sleep for 1 second
