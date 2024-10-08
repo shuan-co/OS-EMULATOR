@@ -136,7 +136,7 @@ private:
         for (int i = 0; i < 10; i++)
         {
             processManager.createProcess("Process " + std::to_string(i));
-            Sleep(1000); // Sleep for 1 second
+            Sleep(1000); // Sleep for 5 second
         }
     }
 
@@ -214,40 +214,55 @@ public:
     }
 
     // CSOPESY-SMI [NVIDIA-SMI]
-    static void opesyosSMI(const std::string &args, ProgramState &state)
-    {
+static void opesyosSMI(const std::string &args, ProgramState &state)
+{
+    system("cls");  // Clear screen for clean output
 
-        // Dummy Process Data
-        system("cls");
-        DummyProcess stack[5];
-        string processNames[5] = {"nt.CBS_cw5n1h2txyewy\\SearchHost.exe",
-                                  "C:\\Program Files (x86)\\steamapps\\common\\wallpaper_engine\\wallpaper64.exe",
-                                  "C:\\Program Files\\NVIDIA Corporation\\GeForce Experience\\NVIDIA Share.exe",
-                                  "C:\\Program Files (x86)\\Steam\\bin\\cef\\cef.win7x64\\steamwebhelper.exe",
-                                  "C:\\Users\\User\\AppData\\Local\\Microsoft\\Launcher\\VerylongVerylongVerylongVerylongVerylong.PowerLauncher.exe"};
-        for (int i = 0; i < 5; i++)
+    // Get the list of processes from the ProcessManager
+    std::unordered_map<std::string, Process> processes = processManager.getAllProcesses();
+
+    if (processes.empty())
+    {
+        std::cout << "No processes are currently running." << std::endl;
+    }
+    else
+    {
+        // Display the SMI header (assumed already implemented in Interfaces)
+        Interfaces::displaySMIHeader();
+
+        // Create a vector to store real processes for SMI display
+        std::vector<DummyProcess> realProcesses;
+        int gpuId = 0;
+
+        // Iterate over the real processes and populate their information
+        for (const auto &pair : processes)
         {
-            stack[i].gpu = i;
-            stack[i].gi = i + 10;    
-            stack[i].ci = i + 20;    
-            stack[i].pid = 1000 + i;
-            stack[i].type = "C+G";
-            stack[i].processName = processNames[i]; 
-            stack[i].gpuMemory = "N/A";            
+            const Process &proc = pair.second;
+            DummyProcess dp;
+            dp.gpu = gpuId++; 
+            dp.gi = proc.currentLine;  
+            dp.ci = proc.totalLines;  
+            dp.pid = proc.pid;   
+            dp.type = proc.getTimestamp();  
+            dp.processName = proc.name; 
+            dp.gpuMemory = "N/A";       
+
+            // Add this real process to the display list
+            realProcesses.push_back(dp);
         }
 
-        // Display 
-        Interfaces::displaySMIHeader();
-        Interfaces::displayProcessInfo(5, stack);
-
-        // Exit
-
-        std::cin.get();
-
-        system("cls");
-        Interfaces::displayHeader();
-        Interfaces::displayMenu();
+        // Display the process information (this assumes an existing display function in Interfaces)
+        Interfaces::displayProcessInfo(realProcesses.size(), realProcesses.data());
     }
+
+    // Exit message
+    std::cin.get();
+    system("cls");
+    Interfaces::displayHeader();
+    Interfaces::displayMenu();
+}
+
+
 
     // Marquee Console Simulator
     static void marqueeConsole(const std::string &args, ProgramState &state)

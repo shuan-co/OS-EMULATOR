@@ -339,34 +339,22 @@ class Interfaces
             displayText("Processes: ");
 
             SetCursorPosition(2, yOffset + 2);
-            displayText("GPU");
+            displayText("#");
+
+            marginWidth(5);
+            displayText("CurrentLine");
+
+            marginWidth(5);
+            displayText("TotalLines");
 
             marginWidth(3);
-            displayText("GI");
-
-            marginWidth(3);
-            displayText("CI");
-
-            marginWidth(8);
             displayText("PID");
 
-            marginWidth(3);
-            displayText("Type");
+            marginWidth(10);
+            displayText("Creation");
 
-            marginWidth(3);
+            marginWidth(10);
             displayText("Process name");
-
-            marginWidth(31);
-            displayText("GPU Memory");
-
-            SetCursorPosition(8, yOffset + 3);
-            displayText("ID");
-
-            marginWidth(3);
-            displayText("ID");
-
-            SetCursorPosition(84, yOffset + 3);
-            displayText("Usage");
 
             SetTextColor(7);
             drawDivider(consoleWidth, 1, 0, yOffset + 4, true, '=');
@@ -376,23 +364,21 @@ class Interfaces
                 SetCursorPosition(4, yOffset + 5 + i);
                 displayText(to_string(processes[i].gpu));
 
-                SetCursorPosition(8, yOffset + 5 + i);
+                SetCursorPosition(13, yOffset + 5 + i);
                 displayText(to_string(processes[i].gi));
 
-                SetCursorPosition(13, yOffset + 5 + i);
+                SetCursorPosition(28, yOffset + 5 + i);
                 displayText(to_string(processes[i].ci));
 
-                SetCursorPosition(22, yOffset + 5 + i);
+                SetCursorPosition(38, yOffset + 5 + i);
                 displayText(to_string(processes[i].pid));
 
-                SetCursorPosition(30, yOffset + 5 + i);
+                SetCursorPosition(45, yOffset + 5 + i);
                 displayText(processes[i].type);
 
-                SetCursorPosition(36, yOffset + 5 + i);
+                SetCursorPosition(70, yOffset + 5 + i);
                 displayText(reduceProcessName(processes[i].processName));
 
-                SetCursorPosition(84, yOffset + 5 + i);
-                displayText(processes[i].gpuMemory);
             }
             SetCursorPosition(0, yOffset + 5 + numProcesses + 1);
             displayText("Press any key to return...");

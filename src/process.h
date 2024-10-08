@@ -86,6 +86,19 @@ public:
         std::lock_guard<std::mutex> lock(mtx);
         return processes.empty();
     }
+
+        std::vector<Process *> getProcessesSnapshot()
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        std::queue<Process *> tempQueue = processes;
+        std::vector<Process *> snapshot;
+        while (!tempQueue.empty())
+        {
+            snapshot.push_back(tempQueue.front());
+            tempQueue.pop();
+        }
+        return snapshot;
+    }
 };
 
 class FCFSScheduler
@@ -168,6 +181,11 @@ public:
     {
         stopSchedulerIfIdle();
     }
+
+    static std::vector<Process *> getQueuedProcesses()
+    {
+        return processQueue.getProcessesSnapshot();
+    }
 };
 
 ProcessQueue FCFSScheduler::processQueue;
@@ -185,7 +203,8 @@ public:
     {
         if (processes.find(name) == processes.end())
         {
-            Process newProcess{name, 1, 100, std::time(nullptr)};
+            int newPid = processes.size();
+            Process newProcess{name, 1, 100, std::time(nullptr), newPid};
             processes[name] = newProcess;
             FCFSScheduler::addProcessToQueue(&processes[name]); 
             return true;
@@ -207,6 +226,11 @@ public:
         return processes.size();
     }
 
+    std::unordered_map<std::string, Process> getAllProcesses() const
+    {
+       return processes;
+    }
+
     void displayAllProcesses() const
     {
         for (const auto &pair : processes)
@@ -222,13 +246,14 @@ public:
 
     void displayProcess(const std::string &name)
     {
-        std::cout << "                _____                                          \n"
-                     "                |  __ \\                                         \n"
-                     "                | |__) | __ ___   ___ ___  ___ ___  ___  ___    \n"
-                     "                |  ___/ '__/ _ \\ / __/ _ \\ / __|/ _ \\ / __|   \n"
-                     "                | |   | | | (_) | (_|  __/ \__ \\ \__ \\  __/ \__ \\   \n"
-                     "                |_|   |_|  \___/ \___| \___||___/___/ \___||___/   \n"
-                  << std::endl;
+    std::cout << "                _____                                          \n"
+                 "                |  __ \\                                         \n"
+                 "                | |__) | __ ___   ___ ___  ___ ___  ___  ___    \n"
+                 "                |  ___/ '__/ _ \\ / __/ _ \\ / __|/ _ \\ / __|   \n"
+                 "                | |   | | | (_) | (_|  __/ \\__ \\ \\__ \\  __/ \\__ \\   \n"
+                 "                |_|   |_|  \\___/ \\___| \\___||___/___/ \\___||___/   \n"
+              << std::endl;
+
 
         Process *process = getProcess(name);
         if (process)
