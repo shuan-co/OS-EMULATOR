@@ -62,8 +62,11 @@ private:
     std::queue<Process *> processes;
     std::mutex mtx;
     std::condition_variable cv;
+    
+
 
 public:
+    const int quantumSplice = 4;
     void addProcess(Process *process)
     {
         std::unique_lock<std::mutex> lock(mtx);
@@ -71,13 +74,23 @@ public:
         cv.notify_one();
     }
 
-    Process *getProcess()
+    Process *getProcessFCFS()
     {
         std::unique_lock<std::mutex> lock(mtx);
         cv.wait(lock, [this]
                 { return !processes.empty(); });
         Process *process = processes.front();
         processes.pop();
+        return process;
+    }
+
+    Process *getProcessRR()
+    {
+        std::unique_lock<std::mutex> lock(mtx);
+        cv.wait(lock, [this] { return !processes.empty(); });
+        Process* process = processes.front();
+        processes.pop();
+        processes.push(process);
         return process;
     }
 
@@ -109,6 +122,7 @@ private:
     static bool running;
     static const int numWorkers = 4;
     static std::mutex startStopMtx;
+    static bool useRoundRobin;
 
     static void workerThreadFunction(int cpuId)
     {
@@ -125,17 +139,27 @@ private:
                 {
                     continue;
                 }
-                processPtr = processQueue.getProcess();
+                if (useRoundRobin)
+                {
+                    processPtr = processQueue.getProcessRR();
+                }
+                else
+                {
+                    processPtr = processQueue.getProcessFCFS();
+                }
             }
 
-            while (processPtr->currentLine < processPtr->totalLines)
+            int timeSpent = 0;
+            while (processPtr->currentLine < processPtr->totalLines &&
+                (!useRoundRobin || timeSpent < processQueue.quantumSplice))
             {
-                processPtr->printLogs(cpuId); 
+                processPtr->printLogs(cpuId);
                 {
                     std::unique_lock<std::mutex> lock(startStopMtx);
                     processPtr->currentLine++;
                 }
-                std::this_thread::sleep_for(std::chrono::seconds(1)); 
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                timeSpent++;
             }
         }
     }
@@ -171,6 +195,12 @@ private:
     }
 
 public:
+
+    static void setRoundRobin(bool click)
+    {
+        useRoundRobin = click;
+    }
+
     static void addProcessToQueue(Process *process)
     {
         processQueue.addProcess(process);
@@ -188,6 +218,7 @@ public:
     }
 };
 
+bool FCFSScheduler::useRoundRobin = false;
 ProcessQueue FCFSScheduler::processQueue;
 std::vector<std::thread> FCFSScheduler::workerThreads;
 bool FCFSScheduler::running = false;

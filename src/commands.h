@@ -157,6 +157,24 @@ public:
 
     // Template Functions: TODO [Command Executions]
 
+    static void changeScheduler(const std::string& args, ProgramState& state)
+    {
+        if (args == "fcfs")
+        {
+            FCFSScheduler::setRoundRobin(false);
+            std::cout << "Switched to FCFS scheduling\n";
+        }
+        else if (args == "rr")
+        {
+            FCFSScheduler::setRoundRobin(true);
+            std::cout << "Switched to Round Robin scheduling\n";
+        }
+        else
+        {
+            std::cout << "Wrong algorithm, can only use fcfs or rr\n";
+        }
+    }
+
     static void initialize(const std::string& args, ProgramState& state)
     {
         cout << "initialize command recognized. Doing Something...\n";
@@ -304,6 +322,7 @@ static void opesyosSMI(const std::string &args, ProgramState &state)
             {"scheduler-stop", Commands::schedulerStop},
             {"report-util", Commands::reportUtil},
             {"opesyos-smi", Commands::opesyosSMI},
+            {"change-scheduler", Commands::changeScheduler},
             // OPESYOS SMI [NVIDIA-SMI]
             // Marquee Console Sampler
             {"marquee-console", Commands::marqueeConsole},
