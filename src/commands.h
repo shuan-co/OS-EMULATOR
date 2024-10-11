@@ -39,65 +39,68 @@ private:
     static bool isExit;
     static array<string, 3> commandHistory;
     static int historyIndex;
+    static std::thread schedulerThread;
 
-    static void storeCommandInHistory(const string &command) {
-        commandHistory[historyIndex] = command; 
-        historyIndex = (historyIndex + 1) % 3; 
+    static void storeCommandInHistory(const string& command) {
+        commandHistory[historyIndex] = command;
+        historyIndex = (historyIndex + 1) % 3;
     }
-    
+
     static bool keyboardPolling() {
         if (_kbhit()) {
             char ch = _getch();
 
             if (ch == '\r') {
-                std::cout << "\n"; 
+                std::cout << "\n";
 
                 if (currentUserInputCommand == "exit") {
-                    currentUserInputCommand.clear(); 
-                    return true;                     
+                    currentUserInputCommand.clear();
+                    return true;
                 }
 
                 if (!currentUserInputCommand.empty()) {
                     storeCommandInHistory(currentUserInputCommand);
-                    currentUserInputCommand.clear(); 
+                    currentUserInputCommand.clear();
                 }
             }
             else if (ch == '\b') {
                 if (!currentUserInputCommand.empty()) {
-                    currentUserInputCommand.pop_back(); 
-                    std::cout << "\b \b";              
+                    currentUserInputCommand.pop_back();
+                    std::cout << "\b \b";
                 }
             }
             else if (isprint(ch)) {
                 currentUserInputCommand += ch;
             }
         }
-        return false; 
+        return false;
     }
 
-    static void runMarqueeAnimation(const std::string &marqueeText, int &x, int &y, int currentWidth, int currentHeight)
+    static void runMarqueeAnimation(const std::string& marqueeText, int& x, int& y, int currentWidth, int currentHeight)
     {
         bool movingDown = true;
         bool movingRight = true;
 
         while (!isExit)
         {
-            Sleep(60); 
+            Sleep(60);
             Interfaces::marqueeConsoleAnimation(x, y, marqueeText);
             Interfaces::displayUserGetCommand(Commands::currentUserInputCommand, currentHeight - 6);
             Interfaces::displayCommandHistory(Commands::commandHistory, Commands::historyIndex, currentHeight - 6);
             Interfaces::resetCursorPositionMarquee(Commands::currentUserInputCommand, currentHeight - 6);
-            
+
             if (movingDown) {
                 if (y < currentHeight - 10) {
-                    y++; 
-                } else {
-                    movingDown = false; 
+                    y++;
+                }
+                else {
+                    movingDown = false;
                     y--;
                 }
-            } else {
+            }
+            else {
                 if (y > 0) {
-                    y--; 
+                    y--;
                 }
                 else {
                     movingDown = true;
@@ -107,16 +110,18 @@ private:
 
             if (movingRight) {
                 if (x < currentWidth - marqueeText.length() - 1) {
-                    x++; 
+                    x++;
                 }
                 else {
                     movingRight = false;
                 }
-            } else {
+            }
+            else {
                 if (x > 0) {
-                    x--; 
-                } else {
-                    movingRight = true; 
+                    x--;
+                }
+                else {
+                    movingRight = true;
                 }
             }
         }
@@ -143,7 +148,7 @@ private:
 public:
 
     //  Implemented Functions
-    static void clear (const std::string& args, ProgramState& state)
+    static void clear(const std::string& args, ProgramState& state)
     {
         system("cls");
         Interfaces::displayHeader();
@@ -156,24 +161,6 @@ public:
     }
 
     // Template Functions: TODO [Command Executions]
-
-    static void changeScheduler(const std::string& args, ProgramState& state)
-    {
-        if (args == "fcfs")
-        {
-            FCFSScheduler::setRoundRobin(false);
-            std::cout << "Switched to FCFS scheduling\n";
-        }
-        else if (args == "rr")
-        {
-            FCFSScheduler::setRoundRobin(true);
-            std::cout << "Switched to Round Robin scheduling\n";
-        }
-        else
-        {
-            std::cout << "Wrong algorithm, can only use fcfs or rr\n";
-        }
-    }
 
     static void initialize(const std::string& args, ProgramState& state)
     {
@@ -201,7 +188,8 @@ public:
                 Interfaces::displayHeader();
                 Interfaces::displayMenu();
             }
-        } else if (option == "-r") {
+        }
+        else if (option == "-r") {
             system("cls");
             processManager.displayProcess(name);
             programState.setContext(Context::PROCESS_SCREEN);
@@ -212,17 +200,23 @@ public:
         }
     }
 
-    static void schedulerTest(const std::string &args, ProgramState &state)
+    static void schedulerTest(const std::string& args, ProgramState& state)
     {
-        std::thread schedulerThread(runSchedulerTest); 
-        schedulerThread.detach();                     
+        std::thread schedulerThread(runSchedulerTest);
+        schedulerThread.detach();
     }
 
     static void schedulerStop(const std::string& args, ProgramState& state)
     {
-        cout << "scheduler-stop command recognized. Doing Something...\n";
-        // DO SOMETHING HERE
+        std::cout << "Stopping the scheduler...\n";
+
+        if (schedulerThread.joinable()) {
+            schedulerThread.join();
+        }
+
         processManager.displayAllProcesses();
+
+        std::cout << "Scheduler stopped successfully. Active processes displayed.\n";
     }
 
     static void reportUtil(const std::string& args, ProgramState& state)
@@ -232,60 +226,60 @@ public:
     }
 
     // CSOPESY-SMI [NVIDIA-SMI]
-static void opesyosSMI(const std::string &args, ProgramState &state)
-{
-    system("cls");  // Clear screen for clean output
-
-    // Get the list of processes from the ProcessManager
-    std::unordered_map<std::string, Process> processes = processManager.getAllProcesses();
-
-    if (processes.empty())
+    static void opesyosSMI(const std::string& args, ProgramState& state)
     {
-        std::cout << "No processes are currently running." << std::endl;
-    }
-    else
-    {
-        // Display the SMI header (assumed already implemented in Interfaces)
-        Interfaces::displaySMIHeader();
+        system("cls");  // Clear screen for clean output
 
-        // Create a vector to store real processes for SMI display
-        std::vector<DummyProcess> realProcesses;
-        int gpuId = 0;
+        // Get the list of processes from the ProcessManager
+        std::unordered_map<std::string, Process> processes = processManager.getAllProcesses();
 
-        // Iterate over the real processes and populate their information
-        for (const auto &pair : processes)
+        if (processes.empty())
         {
-            const Process &proc = pair.second;
-            DummyProcess dp;
-            dp.gpu = gpuId++; 
-            dp.gi = proc.currentLine;  
-            dp.ci = proc.totalLines;  
-            dp.pid = proc.pid;   
-            dp.type = proc.getTimestamp();  
-            dp.processName = proc.name; 
-            dp.gpuMemory = "N/A";       
+            std::cout << "No processes are currently running." << std::endl;
+        }
+        else
+        {
+            // Display the SMI header (assumed already implemented in Interfaces)
+            Interfaces::displaySMIHeader();
 
-            // Add this real process to the display list
-            realProcesses.push_back(dp);
+            // Create a vector to store real processes for SMI display
+            std::vector<DummyProcess> realProcesses;
+            int gpuId = 0;
+
+            // Iterate over the real processes and populate their information
+            for (const auto& pair : processes)
+            {
+                const Process& proc = pair.second;
+                DummyProcess dp;
+                dp.gpu = gpuId++;
+                dp.gi = proc.currentLine;
+                dp.ci = proc.totalLines;
+                dp.pid = proc.pid;
+                dp.type = proc.getTimestamp();
+                dp.processName = proc.name;
+                dp.gpuMemory = "N/A";
+
+                // Add this real process to the display list
+                realProcesses.push_back(dp);
+            }
+
+            // Display the process information (this assumes an existing display function in Interfaces)
+            Interfaces::displayProcessInfo(realProcesses.size(), realProcesses.data());
         }
 
-        // Display the process information (this assumes an existing display function in Interfaces)
-        Interfaces::displayProcessInfo(realProcesses.size(), realProcesses.data());
+        // Exit message
+        std::cin.get();
+        system("cls");
+        Interfaces::displayHeader();
+        Interfaces::displayMenu();
     }
-
-    // Exit message
-    std::cin.get();
-    system("cls");
-    Interfaces::displayHeader();
-    Interfaces::displayMenu();
-}
 
 
 
     // Marquee Console Simulator
-    static void marqueeConsole(const std::string &args, ProgramState &state)
+    static void marqueeConsole(const std::string& args, ProgramState& state)
     {
-        isExit = false; 
+        isExit = false;
         const std::string marqueeText = "Hello world in marquee!";
         int currentWidth, currentHeight;
         Interfaces::GetConsoleSize(currentWidth, currentHeight);
@@ -293,9 +287,9 @@ static void opesyosSMI(const std::string &args, ProgramState &state)
         int y = 0;
         int x = 0;
 
-        std::thread marqueeThread(runMarqueeAnimation, 
-                std::ref(marqueeText), std::ref(x), 
-                std::ref(y), currentWidth, currentHeight);
+        std::thread marqueeThread(runMarqueeAnimation,
+            std::ref(marqueeText), std::ref(x),
+            std::ref(y), currentWidth, currentHeight);
         std::thread pollingThread(runKeyboardPolling);
 
         marqueeThread.join();
@@ -313,7 +307,7 @@ static void opesyosSMI(const std::string &args, ProgramState &state)
         /*
             Create Association Mapping between string command syntax and static void function executions
         */
-        static const std::map<std::string, std::function<void(const string &, ProgramState &)>> commandMap = {
+        static const std::map<std::string, std::function<void(const string&, ProgramState&)>> commandMap = {
             {"clear", Commands::clear},
             {"exit", Commands::exit},
             {"initialize", Commands::initialize},
@@ -322,15 +316,14 @@ static void opesyosSMI(const std::string &args, ProgramState &state)
             {"scheduler-stop", Commands::schedulerStop},
             {"report-util", Commands::reportUtil},
             {"opesyos-smi", Commands::opesyosSMI},
-            {"change-scheduler", Commands::changeScheduler},
             // OPESYOS SMI [NVIDIA-SMI]
             // Marquee Console Sampler
             {"marquee-console", Commands::marqueeConsole},
             // Manual Exception, for Debugging / Checking Error Handling in Clock Cycle
-            {"throw-exception", [](const string &, ProgramState &)
+            {"throw-exception", [](const string&, ProgramState&)
              {
                  throw runtime_error("OS Error 000: Sample Exception Triggered");
-             }}};
+             }} };
 
         /*
             Check if command key can be found in the mapping
@@ -359,6 +352,6 @@ string Commands::currentUserInputCommand = "";
 bool Commands::isExit = false;
 
 // Initialize command history array and index
-std::array<std::string, 3> Commands::commandHistory = {"", "", ""};
+std::array<std::string, 3> Commands::commandHistory = { "", "", "" };
 int Commands::historyIndex = 0;
 #endif
