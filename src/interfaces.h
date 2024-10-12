@@ -191,17 +191,28 @@ class Interfaces
         static void displayMenu()
         {
             cout << "\033[38;2;21;188;12m"; // RGB(21, 188, 12)
-            cout << "Hello, Welcome to CSOPESY Command Line!\n";
+            cout << "Hello, Welcome to CSOPESY Emulator!\n\n";
 
+            cout << "Developers: \n";
+            cout << "Co, Shuan Noel\n";
+            cout << "Gregorio, John Marc\n";
+            cout << "Villanueva, Miguel\n";
+            cout << "Quinones, Angelo Yanto\n\n";
+            
+            cout << "Last Updated: ";
             cout << "\033[38;2;226;219;150m"; // RGB(226, 219, 150)
-            cout << "Type 'exit' to quit, 'clear' to clear the screen\n";
+            cout << "10-12-2024\n";
+
+            // Reset to default color
+            cout << "\033[0m";
+            cout << "=============================================================================\n\n";
         }
 
         static void displayGetCommand()
         {
             // Reset to default color
             cout << "\033[0m";
-            cout << "Enter a command: ";
+            cout << "root:\\> ";
         }
 
         static void displaySMIHeader()

@@ -13,6 +13,7 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <random>
 #include <unordered_map>
 
 struct Process
@@ -120,7 +121,7 @@ private:
     static ProcessQueue processQueue;
     static std::vector<std::thread> workerThreads;
     static bool running;
-    static const int numWorkers = 4;
+    static int numWorkers;
     static std::mutex startStopMtx;
     static bool useRoundRobin;
 
@@ -216,6 +217,11 @@ public:
     {
         return processQueue.getProcessesSnapshot();
     }
+
+    static void setCPUThreads(int numCPU)
+    {
+        numWorkers = numCPU;
+    }
 };
 
 bool FCFSScheduler::useRoundRobin = false;
@@ -230,14 +236,19 @@ private:
     std::unordered_map<std::string, Process> processes;
 
 public:
-    bool createProcess(const std::string &name)
+    bool createProcess(const std::string &name, const int min, const int max)
     {
         if (processes.find(name) == processes.end())
         {
+            std::random_device rd;                           
+            std::mt19937 gen(rd());                          
+            std::uniform_int_distribution<> distr(min, max); 
+
+            int max_instruction_lines = distr(gen); 
             int newPid = processes.size();
-            Process newProcess{name, 0, 100, std::time(nullptr), newPid};
+            Process newProcess{name, 0, max_instruction_lines, std::time(nullptr), newPid};
             processes[name] = newProcess;
-            FCFSScheduler::addProcessToQueue(&processes[name]); 
+            FCFSScheduler::addProcessToQueue(&processes[name]);
             return true;
         }
         else
@@ -277,27 +288,61 @@ public:
 
     void displayProcess(const std::string &name)
     {
-    std::cout << "                _____                                          \n"
-                 "                |  __ \\                                         \n"
-                 "                | |__) | __ ___   ___ ___  ___ ___  ___  ___    \n"
-                 "                |  ___/ '__/ _ \\ / __/ _ \\ / __|/ _ \\ / __|   \n"
-                 "                | |   | | | (_) | (_|  __/ \\__ \\ \\__ \\  __/ \\__ \\   \n"
-                 "                |_|   |_|  \\___/ \\___| \\___||___/___/ \\___||___/   \n"
-              << std::endl;
-
+        std::cout << "================================================================================\n";
+        std::cout << " ______   ______     ______     ______     ______     ______     ______    \n"
+                     "/\\  == \\ /\\  == \\   /\\  __ \\   /\\  ___\\   /\\  ___\\   /\\  ___\\   /\\  ___\\   \n"
+                     "\\ \\  _-/ \\ \\  __<   \\ \\ \\/\\ \\  \\ \\ \\____  \\ \\  __\\   \\ \\___  \\  \\ \\___  \\  \n"
+                     " \\ \\_\\    \\ \\_\\ \\_\\  \\ \\_____\\  \\ \\_____\\  \\ \\_____\\  \\/\\_____\\  \\/\\_____\\ \n"
+                     "  \\/_/     \\/_/ /_/   \\/_____/   \\/_____/   \\/_____/   \\/_____/   \\/_____/ \n" << endl;;
+        std::cout << "================================================================================\n\n";
 
         Process *process = getProcess(name);
         if (process)
         {
-            std::cout << "Process name: " << process->name << std::endl;
-            std::cout << "Current line: " << process->currentLine << " / " << process->totalLines << std::endl;
             std::cout << "Created at: " << process->getTimestamp() << std::endl;
+            std::cout << "Process: " << process->name << std::endl;
+            std::cout << "ID: " << process->pid << std::endl;
+            std::cout << "\n";
+
+            std::cout << "Current instruction line: " << process->currentLine << " / " << process->totalLines << std::endl;
+            std::cout << "Lines of code: " << process->totalLines << std::endl;
+            std::cout << "\n";
         }
         else
         {
-            std::cout << "Process not found." << std::endl;
+            std::cout << "Process " << name << " not found." << std::endl;
+            std::cout << "Use command [exit] then press [enter] to return to root terminal" << std::endl;
+        }
+    }
+
+    void displayProcessSMI(const std::string &name){
+        Process *process = getProcess(name);
+        if (process)
+        {
+            std::cout << "\nCreated at: " << process->getTimestamp() << std::endl;
+            std::cout << "Process: " << process->name << std::endl;
+            std::cout << "ID: " << process->pid << std::endl;
+            std::cout << "\n";
+
+            if (process->currentLine < process->totalLines)
+            {
+                std::cout << "Current instruction line: " << process->currentLine << " / " << process->totalLines << std::endl;
+                std::cout << "Lines of code: " << process->totalLines << std::endl;
+                std::cout << "\n";
+            }
+            else
+            {
+                std::cout << "Finished!\n\n";
+            }
+        }
+        else
+        {
+            std::cout << "Process " << name << " not found." << std::endl;
+            std::cout << "Use command [exit] then press [enter] to return to root terminal" << std::endl;
         }
     }
 };
+
+int FCFSScheduler::numWorkers = 1;
 
 #endif

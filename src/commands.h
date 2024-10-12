@@ -45,6 +45,7 @@ private:
     static array<string, 3> commandHistory;
     static int historyIndex;
     static std::thread schedulerThread;
+    static bool isSchedulerRunning;
 
     static void storeCommandInHistory(const string& command) {
         commandHistory[historyIndex] = command;
@@ -143,10 +144,20 @@ private:
 
     static void runSchedulerTest()
     {
-        for (int i = 0; i < 10; i++)
+        int i = 0;
+        int iteration = 0;
+
+        while (Commands::isSchedulerRunning)
         {
-            processManager.createProcess("Process " + std::to_string(i));
-            Sleep(1000); // Sleep for 5 second
+            // Check if the iteration number matches the batchProcessFreq condition
+            if (iteration % configSettings.batchProcessFreq == 0)
+            {
+                processManager.createProcess("process" + std::to_string(i), configSettings.minIns, configSettings.maxIns);
+                i++;
+            }
+
+            iteration++;
+            Sleep(1000);
         }
     }
 
@@ -200,6 +211,7 @@ public:
                     std::cout << "Error: num-cpu must be between 1 and 128\n";
                     return;
                 }
+                FCFSScheduler::setCPUThreads(configSettings.numCpu);
             } else if (key == "scheduler") {
                 iss >> configSettings.scheduler;
                 if (configSettings.scheduler != "fcfs" && configSettings.scheduler != "rr") {
@@ -250,19 +262,16 @@ public:
         iss >> option >> name;
 
         if (option == "-s") {
-            bool created = processManager.createProcess(name);
-            system("cls");
+            bool created = processManager.createProcess(name, configSettings.minIns, configSettings.maxIns);
             if (created) {
+                system("cls");
                 std::cout << "Created screen for process: " << name << std::endl;
                 processManager.displayProcess(name);
                 programState.setContext(Context::PROCESS_SCREEN);
                 programState.setCurrentProcess(name);
             }
             else {
-                system("cls");
                 std::cout << "Process already exists\n";
-                Interfaces::displayHeader();
-                Interfaces::displayMenu();
             }
         }
         else if (option == "-r") {
@@ -271,28 +280,45 @@ public:
             programState.setContext(Context::PROCESS_SCREEN);
             programState.setCurrentProcess(name);
         }
+        else if (option == "-ls"){
+            opesyosSMI();
+        }
         else {
-            std::cout << "Invalid screen command. Use -s to create or -r to display." << std::endl;
+            std::cout << "Invalid screen command. Use -s to create, -r to display or -ls to view all processes" << std::endl;
         }
     }
 
-    static void schedulerTest(const std::string& args, ProgramState& state)
+    static void schedulerTest(const std::string &args, ProgramState &state)
     {
-        std::thread schedulerThread(runSchedulerTest);
-        schedulerThread.detach();
-    }
-
-    static void schedulerStop(const std::string& args, ProgramState& state)
-    {
-        std::cout << "Stopping the scheduler...\n";
-
-        if (schedulerThread.joinable()) {
-            schedulerThread.join();
+        if (isSchedulerRunning)
+        {
+            std::cout << "Scheduler is already running." << std::endl;
+            return;
         }
 
-        processManager.displayAllProcesses();
+        isSchedulerRunning = true;
+        schedulerThread = std::thread(runSchedulerTest);
+        std::cout << "Scheduler started successfully." << std::endl;
+    }
 
-        std::cout << "Scheduler stopped successfully. Active processes displayed.\n";
+    static void schedulerStop(const std::string &args, ProgramState &state)
+    {
+        if (!isSchedulerRunning)
+        {
+            std::cout << "Scheduler is not running." << std::endl;
+            return;
+        }
+
+        std::cout << "Stopping the scheduler..." << std::endl;
+
+        isSchedulerRunning = false;
+
+        if (schedulerThread.joinable())
+        {
+            schedulerThread.join(); 
+        }
+
+        std::cout << "Scheduler stopped successfully." << std::endl;
     }
 
     static void reportUtil(const std::string& args, ProgramState& state)
@@ -302,7 +328,7 @@ public:
     }
 
     // CSOPESY-SMI [NVIDIA-SMI]
-    static void opesyosSMI(const std::string& args, ProgramState& state)
+    static void opesyosSMI()
     {
         system("cls");  // Clear screen for clean output
 
@@ -312,6 +338,9 @@ public:
         if (processes.empty())
         {
             std::cout << "No processes are currently running." << std::endl;
+
+            std::cout << "Press any enter to return to root terminal" << std::endl;
+            std::cout << "root:\\process> ";
         }
         else
         {
@@ -377,6 +406,17 @@ public:
         Interfaces::displayMenu();
     }
 
+    // Get Specific Process SMI
+    static void processSMI(const std::string& args, ProgramState& state)
+    {
+        if (state.getCurrentProcess() != ""){
+            processManager.displayProcessSMI(state.getCurrentProcess());
+        }
+        else {
+            std::cout << "Command not recognized. Please try again." << endl;
+        }
+    }
+
     // Executer
     static void execute(const string& command, ProgramState& programState)
     {
@@ -391,8 +431,7 @@ public:
             {"scheduler-test", Commands::schedulerTest},
             {"scheduler-stop", Commands::schedulerStop},
             {"report-util", Commands::reportUtil},
-            {"opesyos-smi", Commands::opesyosSMI},
-            // OPESYOS SMI [NVIDIA-SMI]
+            {"process-smi", Commands::processSMI},
             // Marquee Console Sampler
             {"marquee-console", Commands::marqueeConsole},
             // Manual Exception, for Debugging / Checking Error Handling in Clock Cycle
@@ -426,6 +465,7 @@ public:
 ProcessManager Commands::processManager;
 string Commands::currentUserInputCommand = "";
 bool Commands::isExit = false;
+bool Commands::isSchedulerRunning;
 
 // Initialize command history array and index
 std::array<std::string, 3> Commands::commandHistory = { "", "", "" };

@@ -67,7 +67,7 @@ public:
                 if (input == "clear" || input == "initialize" || input == "screen" ||
                     input == "scheduler-test" || input == "scheduler-stop" ||
                     input == "report-util" || input == "marquee-console" ||
-                    input == "throw-exception" || input == "opesyos-smi")
+                    input == "throw-exception")
                 {
                     std::cout << "Command not recognized. Please try again.\n";
                     return true;
