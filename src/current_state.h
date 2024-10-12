@@ -12,9 +12,10 @@ class ProgramState {
 private:
     Context currentContext;
     std::string currentProcessName;
+    bool initialized;
 
 public:
-    ProgramState() : currentContext(Context::MAIN_MENU), currentProcessName("") {}
+    ProgramState() : currentContext(Context::MAIN_MENU), currentProcessName(""), initialized(false) {}
 
     void setContext(Context context) {
         currentContext = context;
@@ -30,6 +31,14 @@ public:
 
     std::string getCurrentProcess() const {
         return currentProcessName;
+    }
+
+    void setInitialized(bool init) {
+        initialized = init;
+    }
+
+    bool isInitialized() const {
+        return initialized;
     }
 };
 

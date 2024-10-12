@@ -14,6 +14,11 @@
 #include <conio.h>
 #include <array>
 #include <thread>
+#include <fstream>
+#include <sstream>
+#include <limits>
+
+
 
 // Operating System Libraries
 
@@ -147,6 +152,19 @@ private:
 
 public:
 
+    struct ConfigSettings {
+        int numCpu;
+        std::string scheduler;
+        int quantumCycles;
+        int batchProcessFreq;
+        int minIns;
+        int maxIns;
+        int delaysPerExec;
+    };
+
+    static ConfigSettings configSettings;
+
+
     //  Implemented Functions
     static void clear(const std::string& args, ProgramState& state)
     {
@@ -164,8 +182,66 @@ public:
 
     static void initialize(const std::string& args, ProgramState& state)
     {
-        cout << "initialize command recognized. Doing Something...\n";
-        // DO SOMETHING HERE
+        std::ifstream configFile("config.txt");
+        if (!configFile.is_open()) {
+            std::cout << "Error: Unable to open config.txt\n";
+            return;
+        }
+
+        std::string line;
+        while (std::getline(configFile, line)) {
+            std::istringstream iss(line);
+            std::string key;
+            iss >> key;
+
+            if (key == "num-cpu") {
+                iss >> configSettings.numCpu;
+                if (configSettings.numCpu < 1 || configSettings.numCpu > 128) {
+                    std::cout << "Error: num-cpu must be between 1 and 128\n";
+                    return;
+                }
+            } else if (key == "scheduler") {
+                iss >> configSettings.scheduler;
+                if (configSettings.scheduler != "fcfs" && configSettings.scheduler != "rr") {
+                    std::cout << "Error: scheduler must be 'fcfs' or 'rr'\n";
+                    return;
+                }
+            } else if (key == "quantum-cycles") {
+                iss >> configSettings.quantumCycles;
+                if (configSettings.quantumCycles < 1 || configSettings.quantumCycles > std::numeric_limits<int>::max()) {
+                    std::cout << "Error: quantum-cycles must be between 1 and 2^32\n";
+                    return;
+                }
+            } else if (key == "batch-process-freq") {
+                iss >> configSettings.batchProcessFreq;
+                if (configSettings.batchProcessFreq < 1 || configSettings.batchProcessFreq > std::numeric_limits<int>::max()) {
+                    std::cout << "Error: batch-process-freq must be between 1 and 2^32\n";
+                    return;
+                }
+            } else if (key == "min-ins") {
+                iss >> configSettings.minIns;
+                if (configSettings.minIns < 1 || configSettings.minIns > std::numeric_limits<int>::max()) {
+                    std::cout << "Error: min-ins must be between 1 and 2^32\n";
+                    return;
+                }
+            } else if (key == "max-ins") {
+                iss >> configSettings.maxIns;
+                if (configSettings.maxIns < 1 || configSettings.maxIns > std::numeric_limits<int>::max()) {
+                    std::cout << "Error: max-ins must be between 1 and 2^32\n";
+                    return;
+                }
+            } else if (key == "delays-per-exec") {
+                iss >> configSettings.delaysPerExec;
+                if (configSettings.delaysPerExec < 0 || configSettings.delaysPerExec > std::numeric_limits<int>::max()) {
+                    std::cout << "Error: delays-per-exec must be between 0 and 2^32\n";
+                    return;
+                }
+            }
+        }
+
+        configFile.close();
+        std::cout << "Configuration initialized successfully.\n";
+        state.setInitialized(true);
     }
 
     static void screen(const std::string& args, ProgramState& programState) {
@@ -354,4 +430,6 @@ bool Commands::isExit = false;
 // Initialize command history array and index
 std::array<std::string, 3> Commands::commandHistory = { "", "", "" };
 int Commands::historyIndex = 0;
+Commands::ConfigSettings Commands::configSettings;
+std::thread Commands::schedulerThread;
 #endif

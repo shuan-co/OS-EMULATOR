@@ -74,6 +74,12 @@ public:
                 }
             }
 
+            if (!programState.isInitialized() && input != "initialize" && input != "exit")
+            {
+                std::cout << "Error: System not initialized. Please use the 'initialize' command first.\n";
+                return true;
+            }
+
             Commands::execute(input, programState);
             return true;
         }
