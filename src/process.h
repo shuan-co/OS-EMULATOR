@@ -36,7 +36,7 @@ struct Process
     void printLogs(int core) const
     {
         // Logic For Printing Logs
-        Sleep(0); // Simulated Delay
+        Sleep(2000); // Simulated Delay
         // std::ofstream logFile;
         // std::string fileName = "./logs/" + name + ".txt";
         // logFile.open(fileName, std::ios::app);
@@ -88,13 +88,12 @@ public:
         return process;
     }
 
-    Process *getProcessRR()
+    Process* getProcessRR()
     {
         std::unique_lock<std::mutex> lock(mtx);
-        cv.wait(lock, [this] { return !processes.empty(); });
+        if (processes.empty()) return nullptr;
         Process* process = processes.front();
         processes.pop();
-        processes.push(process);
         return process;
     }
 
@@ -129,6 +128,14 @@ private:
     static bool useRoundRobin;
     static int currentCpuId;
     static int runningWorkersCount;
+    static std::vector<int> availableCores;
+
+    static void initializeCores() {
+        availableCores.clear();
+        for (int i = 1; i <= numWorkers; ++i) {
+            availableCores.push_back(i);
+        }
+    }
 
     static void workerThreadFunction(int cpuId)
     {
@@ -155,11 +162,11 @@ private:
                 }
 
                 // Assign CPU cores in round-robin order
-                processPtr->cpu = currentCpuId++;
-                if (currentCpuId > numWorkers)
-                {
-                    currentCpuId = 1;
+                if (!availableCores.empty()) {
+                    processPtr->cpu = availableCores.front();
+                    availableCores.erase(availableCores.begin());
                 }
+                
 
                 // Increment runningWorkersCount as this thread is now running a process
                 ++runningWorkersCount;
@@ -177,12 +184,22 @@ private:
                 std::this_thread::sleep_for(std::chrono::seconds(1));
                 timeSpent++;
             }
-            processPtr->cpu = -1;
+            // processPtr->cpu = -1;
             // Decrement runningWorkersCount as the process has finished or yielded
             {
                 std::unique_lock<std::mutex> lock(startStopMtx);
+                availableCores.push_back(processPtr->cpu);
+                std::sort(availableCores.begin(), availableCores.end());
+                processPtr->cpu = -1;
                 --runningWorkersCount;
             }
+
+            if (useRoundRobin && processPtr->currentLine < processPtr->totalLines)
+            {
+                processQueue.addProcess(processPtr);
+            }
+
+
         }
     }
 
@@ -242,6 +259,7 @@ public:
     static void setCPUThreads(int numCPU)
     {
         numWorkers = numCPU;
+        initializeCores();
     }
 
     static int getCPUThreads()
@@ -261,6 +279,7 @@ ProcessQueue FCFSScheduler::processQueue;
 std::vector<std::thread> FCFSScheduler::workerThreads;
 bool FCFSScheduler::running = false;
 std::mutex FCFSScheduler::startStopMtx;
+std::vector<int> FCFSScheduler:: availableCores;
 
 class ProcessManager
 {

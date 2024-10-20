@@ -142,6 +142,24 @@ private:
         }
     }
 
+    static void runDebugSchedulerTest()
+    {
+        int i = 0;
+        int iteration = 0;
+
+        while (iteration < 10)
+        {
+            if (iteration % configSettings.batchProcessFreq == 0)
+            {
+                processManager.createProcess("process" + std::to_string(i), configSettings.minIns, configSettings.maxIns);
+                i++;
+            }
+
+            iteration++;
+            Sleep(500);
+        }
+    }
+
     static void runSchedulerTest()
     {
         int i = 0;
@@ -157,14 +175,14 @@ private:
             }
 
             iteration++;
-            Sleep(1000);
+            Sleep(500);
         }
     }
 
     // Define the comparison function for sorting
     static bool compareProcesses(const DummyProcess &a, const DummyProcess &b)
     {
-        return a.gi < b.gi; // Sort in descending order of gi
+        return a.pid < b.pid; // Sort in descending order of gi
     }
 
 public:
@@ -328,6 +346,19 @@ public:
         }
 
         std::cout << "Scheduler stopped successfully." << std::endl;
+    }
+
+    static void debugSchedulerTest(const std::string& args, ProgramState& state)
+    {
+        if (isSchedulerRunning)
+        {
+            std::cout << "Scheduler is already running." << std::endl;
+            return;
+        }
+
+        isSchedulerRunning = true;
+        schedulerThread = std::thread(runDebugSchedulerTest);
+        std::cout << "Scheduler started successfully." << std::endl;
     }
 
     static void reportUtil(const std::string& args, ProgramState& state)
@@ -526,6 +557,7 @@ public:
             {"scheduler-stop", Commands::schedulerStop},
             {"report-util", Commands::reportUtil},
             {"process-smi", Commands::processSMI},
+            {"debug-scheduler", Commands::debugSchedulerTest},
             // Marquee Console Sampler
             {"marquee-console", Commands::marqueeConsole},
             // Manual Exception, for Debugging / Checking Error Handling in Clock Cycle
