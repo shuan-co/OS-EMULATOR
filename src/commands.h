@@ -17,7 +17,7 @@
 #include <fstream>
 #include <sstream>
 #include <limits>
-
+#include <algorithm>
 
 
 // Operating System Libraries
@@ -161,6 +161,12 @@ private:
         }
     }
 
+    // Define the comparison function for sorting
+    static bool compareProcesses(const DummyProcess &a, const DummyProcess &b)
+    {
+        return a.gi < b.gi; // Sort in descending order of gi
+    }
+
 public:
 
     struct ConfigSettings {
@@ -217,6 +223,9 @@ public:
                 if (configSettings.scheduler != "fcfs" && configSettings.scheduler != "rr") {
                     std::cout << "Error: scheduler must be 'fcfs' or 'rr'\n";
                     return;
+                }
+                if (configSettings.scheduler == "rr"){
+                    FCFSScheduler::setRoundRobin(true);
                 }
             } else if (key == "quantum-cycles") {
                 iss >> configSettings.quantumCycles;
@@ -323,15 +332,99 @@ public:
 
     static void reportUtil(const std::string& args, ProgramState& state)
     {
-        cout << "report-util command recognized. Doing Something...\n";
-        // DO SOMETHING HERE
+        // Open the file in append mode
+        std::ofstream logFile("./csopesy-log.txt", std::ios::app);
+        if (!logFile.is_open())
+        {
+            std::cerr << "Error: Unable to open log file." << std::endl;
+            return;
+        }
+
+        // Get the list of processes from the ProcessManager
+        std::unordered_map<std::string, Process> processes = processManager.getAllProcesses();
+
+        if (processes.empty())
+        {
+            logFile << "No processes are currently running." << std::endl;
+        }
+        else
+        {
+            logFile << "----------------------------------\n";
+            logFile << "CPU utilization: "
+                    << (static_cast<double>(FCFSScheduler::getRunningWorkersCount()) / FCFSScheduler::getCPUThreads()) * 100
+                    << "%" << std::endl;
+            logFile << "Cores used: " << FCFSScheduler::getRunningWorkersCount() << std::endl;
+            logFile << "Cores available: " << FCFSScheduler::getCPUThreads() - FCFSScheduler::getRunningWorkersCount() << "\n"
+                    << std::endl;
+
+            // Create a vector to store real processes for SMI display
+            std::vector<DummyProcess> realProcesses;
+            int gpuId = 0;
+
+            // Iterate over the real processes and populate their information
+            for (const auto &pair : processes)
+            {
+                const Process &proc = pair.second;
+                DummyProcess dp;
+                dp.gpu = gpuId++;
+                dp.gi = proc.currentLine;
+                dp.ci = proc.totalLines;
+                dp.pid = proc.pid;
+                dp.type = proc.getTimestamp();
+                dp.processName = proc.name;
+                dp.gpuMemory = "N/A";
+                dp.core = proc.cpu;
+
+                // Add this real process to the display list
+                realProcesses.push_back(dp);
+            }
+            std::sort(realProcesses.begin(), realProcesses.end(), compareProcesses);
+
+            // Write running processes to the log file
+            logFile << "Running Processes:\n";
+            for (const auto &proc : realProcesses)
+            {
+                if (proc.gi < proc.ci)
+                {
+                    logFile << std::left << std::setw(15) << proc.processName
+                            << std::left << std::setw(25) << proc.type
+                            << std::setw(12) << (proc.core == -1 ? "Core: N/A" : "Core: " + std::to_string(proc.core))
+                            << std::setw(12) << (std::to_string(proc.gi) + " / " + std::to_string(proc.ci)) << "\n";
+                }
+            }
+
+            // Write finished processes to the log file
+            logFile << "\nFinished Processes:\n";
+            for (const auto &proc : realProcesses)
+            {
+                if (proc.gi >= proc.ci)
+                {
+                    logFile << std::left << std::setw(15) << proc.processName
+                            << std::left << std::setw(25) << proc.type
+                            << std::setw(12) << "Finished"
+                            << std::setw(12) << (std::to_string(proc.gi) + " / " + std::to_string(proc.ci)) << "\n";
+                }
+            }
+
+            logFile << "----------------------------------\n\n";
+        }
+
+        // Close the log file
+        logFile.close();
+        char absPath[MAX_PATH];
+        if (GetFullPathNameA("./csopesy-log.txt", MAX_PATH, absPath, nullptr) != 0)
+        {
+            std::cout << "Report Generated at: " << absPath << std::endl;
+        }
+        else
+        {
+            std::cerr << "Error finding absolute path." << std::endl;
+        }
     }
 
     // CSOPESY-SMI [NVIDIA-SMI]
     static void opesyosSMI()
     {
-        system("cls");  // Clear screen for clean output
-
         // Get the list of processes from the ProcessManager
         std::unordered_map<std::string, Process> processes = processManager.getAllProcesses();
 
@@ -344,9 +437,9 @@ public:
         }
         else
         {
-            // Display the SMI header (assumed already implemented in Interfaces)
-            Interfaces::displaySMIHeader();
-
+            cout << "CPU utilization: " << (static_cast<double>(FCFSScheduler::getRunningWorkersCount()) / FCFSScheduler::getCPUThreads()) * 100 << "%" << endl;
+            cout << "Cores used: " << FCFSScheduler::getRunningWorkersCount() << endl;
+            cout << "Cores available: " << FCFSScheduler::getCPUThreads() - FCFSScheduler::getRunningWorkersCount() << "\n" << endl;
             // Create a vector to store real processes for SMI display
             std::vector<DummyProcess> realProcesses;
             int gpuId = 0;
@@ -363,20 +456,21 @@ public:
                 dp.type = proc.getTimestamp();
                 dp.processName = proc.name;
                 dp.gpuMemory = "N/A";
+                dp.core = proc.cpu;
 
                 // Add this real process to the display list
                 realProcesses.push_back(dp);
             }
-
+            std::sort(realProcesses.begin(), realProcesses.end(), compareProcesses);
             // Display the process information (this assumes an existing display function in Interfaces)
             Interfaces::displayProcessInfo(realProcesses.size(), realProcesses.data());
         }
 
-        // Exit message
-        std::cin.get();
-        system("cls");
-        Interfaces::displayHeader();
-        Interfaces::displayMenu();
+        // // Exit message
+        // std::cin.get();
+        // system("cls");
+        // Interfaces::displayHeader();
+        // Interfaces::displayMenu();
     }
 
 

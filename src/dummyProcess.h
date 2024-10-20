@@ -15,6 +15,7 @@ class DummyProcess
         string processName;
         string gpuMemory;
         int usage;
+        int core;
 };
 
 #endif

@@ -23,6 +23,7 @@ struct Process
     int totalLines;
     std::time_t creationTime;
     int pid;
+    int cpu;
 
     std::string getTimestamp() const
     {
@@ -34,26 +35,28 @@ struct Process
 
     void printLogs(int core) const
     {
-        std::ofstream logFile;
-        std::string fileName = "./logs/" + name + ".txt";
-        logFile.open(fileName, std::ios::app);
+        // Logic For Printing Logs
+        Sleep(0); // Simulated Delay
+        // std::ofstream logFile;
+        // std::string fileName = "./logs/" + name + ".txt";
+        // logFile.open(fileName, std::ios::app);
 
-        if (!logFile.is_open())
-        {
-            std::cerr << "Error: Unable to open log file: " << fileName << std::endl;
-            return;
-        }
+        // if (!logFile.is_open())
+        // {
+        //     std::cerr << "Error: Unable to open log file: " << fileName << std::endl;
+        //     return;
+        // }
 
-        logFile.seekp(0, std::ios::end);
-        if (logFile.tellp() == 0)
-        {
-            logFile << "Process name: " << name << "\n";
-            logFile << "Logs:" << "\n\n";
-        }
+        // logFile.seekp(0, std::ios::end);
+        // if (logFile.tellp() == 0)
+        // {
+        //     logFile << "Process name: " << name << "\n";
+        //     logFile << "Logs:" << "\n\n";
+        // }
 
-        logFile << getTimestamp() << " Core:" << core << " \"Hello world from " << name << "\"\n";
+        // logFile << getTimestamp() << " Core:" << core << " \"Hello world from " << name << "\"\n";
 
-        logFile.close();
+        // logFile.close();
     }
 };
 
@@ -124,6 +127,8 @@ private:
     static int numWorkers;
     static std::mutex startStopMtx;
     static bool useRoundRobin;
+    static int currentCpuId;
+    static int runningWorkersCount;
 
     static void workerThreadFunction(int cpuId)
     {
@@ -148,19 +153,35 @@ private:
                 {
                     processPtr = processQueue.getProcessFCFS();
                 }
+
+                // Assign CPU cores in round-robin order
+                processPtr->cpu = currentCpuId++;
+                if (currentCpuId > numWorkers)
+                {
+                    currentCpuId = 1;
+                }
+
+                // Increment runningWorkersCount as this thread is now running a process
+                ++runningWorkersCount;
             }
 
             int timeSpent = 0;
             while (processPtr->currentLine < processPtr->totalLines &&
-                (!useRoundRobin || timeSpent < processQueue.quantumSplice))
+                   (!useRoundRobin || timeSpent < processQueue.quantumSplice))
             {
-                processPtr->printLogs(cpuId);
+                processPtr->printLogs(processPtr->cpu);
                 {
                     std::unique_lock<std::mutex> lock(startStopMtx);
                     processPtr->currentLine++;
                 }
                 std::this_thread::sleep_for(std::chrono::seconds(1));
                 timeSpent++;
+            }
+            processPtr->cpu = -1;
+            // Decrement runningWorkersCount as the process has finished or yielded
+            {
+                std::unique_lock<std::mutex> lock(startStopMtx);
+                --runningWorkersCount;
             }
         }
     }
@@ -222,6 +243,17 @@ public:
     {
         numWorkers = numCPU;
     }
+
+    static int getCPUThreads()
+    {
+        return numWorkers;
+    }
+
+    static int getRunningWorkersCount()
+    {
+        std::unique_lock<std::mutex> lock(startStopMtx);
+        return runningWorkersCount;
+    }
 };
 
 bool FCFSScheduler::useRoundRobin = false;
@@ -247,6 +279,7 @@ public:
             int max_instruction_lines = distr(gen); 
             int newPid = processes.size();
             Process newProcess{name, 0, max_instruction_lines, std::time(nullptr), newPid};
+            newProcess.cpu = -1;
             processes[name] = newProcess;
             FCFSScheduler::addProcessToQueue(&processes[name]);
             return true;
@@ -273,18 +306,6 @@ public:
        return processes;
     }
 
-    void displayAllProcesses() const
-    {
-        for (const auto &pair : processes)
-        {
-            const Process &process = pair.second;
-            std::cout << "\nProcess name: " << process.name << std::endl;
-            std::cout << "Current line: " << process.currentLine << " / " << process.totalLines << std::endl;
-            std::cout << "Created at: " << process.getTimestamp() << std::endl;
-            std::cout << "PID: " << process.pid << "\n";
-        }
-        std::cout << "Total processes: " << getProcessCount() << "\n";
-    }
 
     void displayProcess(const std::string &name)
     {
@@ -344,5 +365,6 @@ public:
 };
 
 int FCFSScheduler::numWorkers = 1;
-
+int FCFSScheduler::currentCpuId = 1;
+int FCFSScheduler::runningWorkersCount = 0;
 #endif
