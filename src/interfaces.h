@@ -339,10 +339,10 @@ public:
         displayText("----------------------------------\n");
         displayText("Running Processes:\n");
 
-        int processNameWidth = 15; // Width for process name
-        int dateWidth = 25;        // Width for date
-        int coreWidth = 12;        // Width for Core
-        int giCiWidth = 12;        // Width for gi/ci
+        int processNameWidth = 15; 
+        int dateWidth = 25;        
+        int coreWidth = 12;        
+        int giCiWidth = 12;        
 
         for (int i = 0; i < numProcesses; i++)
         {

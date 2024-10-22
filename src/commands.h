@@ -146,8 +146,7 @@ private:
     {
         int i = 0;
         int iteration = 0;
-
-        while (iteration < 10)
+        while (i < 10)
         {
             if (iteration % configSettings.batchProcessFreq == 0)
             {
@@ -164,7 +163,6 @@ private:
     {
         int i = 0;
         int iteration = 0;
-
         while (Commands::isSchedulerRunning)
         {
             // Check if the iteration number matches the batchProcessFreq condition
@@ -183,6 +181,28 @@ private:
     static bool compareProcesses(const DummyProcess &a, const DummyProcess &b)
     {
         return a.pid < b.pid; // Sort in descending order of gi
+    }
+
+    // Function to trim whitespace from both ends of the string
+    static string trim(const std::string &str)
+    {
+        // Remove leading whitespace
+        size_t start = str.find_first_not_of(' ');
+        // If the string is all whitespace, return an empty string
+        if (start == std::string::npos)
+            return "";
+
+        // Remove trailing whitespace
+        size_t end = str.find_last_not_of(' ');
+
+        return str.substr(start, end - start + 1);
+    }
+
+    // Function to check if a string is empty or contains only whitespace
+    static bool isStringEmptyOrWhitespace(const std::string &str)
+    {
+        std::string trimmedStr = trim(str);
+        return trimmedStr.empty();
     }
 
 public:
@@ -251,6 +271,7 @@ public:
                     std::cout << "Error: quantum-cycles must be between 1 and 2^32\n";
                     return;
                 }
+                ProcessQueue::setQuantumSplice(configSettings.quantumCycles);
             } else if (key == "batch-process-freq") {
                 iss >> configSettings.batchProcessFreq;
                 if (configSettings.batchProcessFreq < 1 || configSettings.batchProcessFreq > std::numeric_limits<int>::max()) {
@@ -275,6 +296,7 @@ public:
                     std::cout << "Error: delays-per-exec must be between 0 and 2^32\n";
                     return;
                 }
+                FCFSScheduler::setDelayPerExec(configSettings.delaysPerExec);
             }
         }
 
@@ -288,32 +310,44 @@ public:
         std::string option, name;
         iss >> option >> name;
 
-        if (option == "-s") {
-            bool created = processManager.createProcess(name, configSettings.minIns, configSettings.maxIns);
-            if (created) {
+        if (isStringEmptyOrWhitespace(name) && option != "-ls")
+        {
+            std::cout << "Invalid screen command. Please provide a process name.\n";
+            return;
+        }
+
+        if (option == "-s")
+            {
+                bool created = processManager.createProcess(name, configSettings.minIns, configSettings.maxIns);
+                if (created)
+                {
+                    system("cls");
+                    std::cout << "Created screen for process: " << name << std::endl;
+                    processManager.displayProcess(name);
+                    programState.setContext(Context::PROCESS_SCREEN);
+                    programState.setCurrentProcess(name);
+                }
+                else
+                {
+                    std::cout << "Process already exists\n";
+                }
+            }
+            else if (option == "-r")
+            {
                 system("cls");
-                std::cout << "Created screen for process: " << name << std::endl;
                 processManager.displayProcess(name);
                 programState.setContext(Context::PROCESS_SCREEN);
                 programState.setCurrentProcess(name);
             }
-            else {
-                std::cout << "Process already exists\n";
+            else if (option == "-ls")
+            {
+                opesyosSMI();
+            }
+            else
+            {
+                std::cout << "Invalid screen command. Use -s to create, -r to display or -ls to view all processes" << std::endl;
             }
         }
-        else if (option == "-r") {
-            system("cls");
-            processManager.displayProcess(name);
-            programState.setContext(Context::PROCESS_SCREEN);
-            programState.setCurrentProcess(name);
-        }
-        else if (option == "-ls"){
-            opesyosSMI();
-        }
-        else {
-            std::cout << "Invalid screen command. Use -s to create, -r to display or -ls to view all processes" << std::endl;
-        }
-    }
 
     static void schedulerTest(const std::string &args, ProgramState &state)
     {
@@ -325,7 +359,7 @@ public:
 
         isSchedulerRunning = true;
         schedulerThread = std::thread(runSchedulerTest);
-        std::cout << "Scheduler started successfully." << std::endl;
+        std::cout << "Scheduler starting..." << std::endl;
     }
 
     static void schedulerStop(const std::string &args, ProgramState &state)
@@ -462,9 +496,6 @@ public:
         if (processes.empty())
         {
             std::cout << "No processes are currently running." << std::endl;
-
-            std::cout << "Press any enter to return to root terminal" << std::endl;
-            std::cout << "root:\\process> ";
         }
         else
         {

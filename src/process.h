@@ -36,7 +36,7 @@ struct Process
     void printLogs(int core) const
     {
         // Logic For Printing Logs
-        Sleep(2000); // Simulated Delay
+        Sleep(0); // Simulated Delay
         // std::ofstream logFile;
         // std::string fileName = "./logs/" + name + ".txt";
         // logFile.open(fileName, std::ios::app);
@@ -70,7 +70,13 @@ private:
 
 
 public:
-    const int quantumSplice = 4;
+    static int quantumSplice;
+
+    static void setQuantumSplice(int quantum)
+    {
+        quantumSplice = quantum;
+    }
+
     void addProcess(Process *process)
     {
         std::unique_lock<std::mutex> lock(mtx);
@@ -129,6 +135,7 @@ private:
     static int currentCpuId;
     static int runningWorkersCount;
     static std::vector<int> availableCores;
+    static int delayPerExec;
 
     static void initializeCores() {
         availableCores.clear();
@@ -176,6 +183,7 @@ private:
             while (processPtr->currentLine < processPtr->totalLines &&
                    (!useRoundRobin || timeSpent < processQueue.quantumSplice))
             {
+                Sleep(delayPerExec);
                 processPtr->printLogs(processPtr->cpu);
                 {
                     std::unique_lock<std::mutex> lock(startStopMtx);
@@ -234,6 +242,11 @@ private:
     }
 
 public:
+
+    static void setDelayPerExec(int value)
+    {
+        delayPerExec = value;
+    }
 
     static void setRoundRobin(bool click)
     {
@@ -386,4 +399,6 @@ public:
 int FCFSScheduler::numWorkers = 1;
 int FCFSScheduler::currentCpuId = 1;
 int FCFSScheduler::runningWorkersCount = 0;
+int ProcessQueue::quantumSplice = 4;
+int FCFSScheduler::delayPerExec = 0;
 #endif
