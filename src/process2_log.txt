@@ -1,0 +1,2 @@
+(10/23/2024 10:10:35 PM) Core:3 Executing instruction 1/114 from process2
+(10/23/2024 10:10:35 PM) Core:3 Executing instruction 2/114 from process2

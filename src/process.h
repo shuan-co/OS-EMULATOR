@@ -146,6 +146,7 @@ private:
 
     static void workerThreadFunction(int cpuId)
     {
+        int cycleCount = 0;
         while (true)
         {
             Process *processPtr = nullptr;
@@ -183,14 +184,21 @@ private:
             while (processPtr->currentLine < processPtr->totalLines &&
                    (!useRoundRobin || timeSpent < processQueue.quantumSplice))
             {
-                Sleep(delayPerExec);
-                processPtr->printLogs(processPtr->cpu);
+                cycleCount++;
+
+                 // Only execute instruction after X delay cycles + 1 execution cycle
+                if (cycleCount % (delayPerExec + 1) == 0)  // Execute on the cycle after X delay cycles
                 {
-                    std::unique_lock<std::mutex> lock(startStopMtx);
-                    processPtr->currentLine++;
+                    processPtr->printLogs(processPtr->cpu);
+                    {
+                        std::unique_lock<std::mutex> lock(startStopMtx);
+                        processPtr->currentLine++;
+                    }
+                    timeSpent++;
                 }
+
+                //small sleep to prevent cpu hogging
                 std::this_thread::sleep_for(std::chrono::seconds(1));
-                timeSpent++;
             }
             // processPtr->cpu = -1;
             // Decrement runningWorkersCount as the process has finished or yielded
