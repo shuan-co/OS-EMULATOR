@@ -1,2 +1,0 @@
-(10/23/2024 10:10:34 PM) Core:1 Executing instruction 1/104 from process0
-(10/23/2024 10:10:34 PM) Core:1 Executing instruction 2/104 from process0
