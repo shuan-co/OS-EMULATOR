@@ -197,7 +197,7 @@ private:
                     timeSpent++;
                 }
 
-                //std::this_thread::sleep_for(std::chrono::seconds(1));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
             // processPtr->cpu = -1;
             // Decrement runningWorkersCount as the process has finished or yielded
