@@ -172,7 +172,7 @@ private:
             }
 
             iteration++;
-            Sleep(500);
+            Sleep(100);
         }
     }
 
