@@ -1,0 +1,18 @@
+# How to Run [FAST]
+
+1. Open ./src directory
+2. Run run.bat (Contains Script to run the OS Emulator)
+
+# How to Run [Manually]
+1. CD ./src directory
+2. in ./src directory run:
+    g++ -std=c++11 os_em_week2.cpp -o a.exe
+3. ./a.exe
+
+# Entry File: os_em_week2.cpp
+
+# Names
+1. Shuan Noel Co
+2. John Marc Gregorio
+3. Miguel Villanueva
+4. Angelo Quiñones

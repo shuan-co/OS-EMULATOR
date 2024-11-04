@@ -197,7 +197,6 @@ private:
                     timeSpent++;
                 }
 
-                //small sleep to prevent cpu hogging
                 std::this_thread::sleep_for(std::chrono::seconds(1));
             }
             // processPtr->cpu = -1;

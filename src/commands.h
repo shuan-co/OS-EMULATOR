@@ -165,7 +165,6 @@ private:
         int iteration = 0;
         while (Commands::isSchedulerRunning)
         {
-            // Check if the iteration number matches the batchProcessFreq condition
             if (iteration % configSettings.batchProcessFreq == 0)
             {
                 processManager.createProcess("process" + std::to_string(i), configSettings.minIns, configSettings.maxIns);
@@ -177,28 +176,23 @@ private:
         }
     }
 
-    // Define the comparison function for sorting
     static bool compareProcesses(const DummyProcess &a, const DummyProcess &b)
     {
         return a.pid < b.pid; // Sort in descending order of gi
     }
 
-    // Function to trim whitespace from both ends of the string
     static string trim(const std::string &str)
     {
-        // Remove leading whitespace
         size_t start = str.find_first_not_of(' ');
-        // If the string is all whitespace, return an empty string
+
         if (start == std::string::npos)
             return "";
 
-        // Remove trailing whitespace
         size_t end = str.find_last_not_of(' ');
 
         return str.substr(start, end - start + 1);
     }
 
-    // Function to check if a string is empty or contains only whitespace
     static bool isStringEmptyOrWhitespace(const std::string &str)
     {
         std::string trimmedStr = trim(str);
@@ -422,11 +416,9 @@ public:
             logFile << "Cores available: " << FCFSScheduler::getCPUThreads() - FCFSScheduler::getRunningWorkersCount() << "\n"
                     << std::endl;
 
-            // Create a vector to store real processes for SMI display
             std::vector<DummyProcess> realProcesses;
             int gpuId = 0;
 
-            // Iterate over the real processes and populate their information
             for (const auto &pair : processes)
             {
                 const Process &proc = pair.second;
@@ -440,12 +432,10 @@ public:
                 dp.gpuMemory = "N/A";
                 dp.core = proc.cpu;
 
-                // Add this real process to the display list
                 realProcesses.push_back(dp);
             }
             std::sort(realProcesses.begin(), realProcesses.end(), compareProcesses);
 
-            // Write running processes to the log file
             logFile << "Running Processes:\n";
             for (const auto &proc : realProcesses)
             {
@@ -490,7 +480,6 @@ public:
     // CSOPESY-SMI [NVIDIA-SMI]
     static void opesyosSMI()
     {
-        // Get the list of processes from the ProcessManager
         std::unordered_map<std::string, Process> processes = processManager.getAllProcesses();
 
         if (processes.empty())
@@ -502,7 +491,7 @@ public:
             cout << "CPU utilization: " << (static_cast<double>(FCFSScheduler::getRunningWorkersCount()) / FCFSScheduler::getCPUThreads()) * 100 << "%" << endl;
             cout << "Cores used: " << FCFSScheduler::getRunningWorkersCount() << endl;
             cout << "Cores available: " << FCFSScheduler::getCPUThreads() - FCFSScheduler::getRunningWorkersCount() << "\n" << endl;
-            // Create a vector to store real processes for SMI display
+
             std::vector<DummyProcess> realProcesses;
             int gpuId = 0;
 
@@ -520,11 +509,9 @@ public:
                 dp.gpuMemory = "N/A";
                 dp.core = proc.cpu;
 
-                // Add this real process to the display list
                 realProcesses.push_back(dp);
             }
             std::sort(realProcesses.begin(), realProcesses.end(), compareProcesses);
-            // Display the process information (this assumes an existing display function in Interfaces)
             Interfaces::displayProcessInfo(realProcesses.size(), realProcesses.data());
         }
 
