@@ -18,7 +18,7 @@
 #include <sstream>
 #include <limits>
 #include <algorithm>
-
+#include <random>
 
 // Operating System Libraries
 
@@ -50,6 +50,27 @@ private:
     static void storeCommandInHistory(const string& command) {
         commandHistory[historyIndex] = command;
         historyIndex = (historyIndex + 1) % 3;
+    }
+
+    static int getRandomInRange(int a, int b)
+    {
+        // If the two integers are the same, return that integer
+        if (a == b)
+        {
+            return a;
+        }
+
+        // Ensure a is the minimum and b is the maximum
+        int min = std::min(a, b);
+        int max = std::max(a, b);
+
+        // Create a random device and a random number generator
+        std::random_device rd;                           // Obtain a random number from hardware
+        std::mt19937 gen(rd());                          // Seed the generator
+        std::uniform_int_distribution<> distr(min, max); // Define the range
+
+        // Return a random number in the specified range
+        return distr(gen);
     }
 
     static bool keyboardPolling() {
@@ -150,7 +171,7 @@ private:
         {
             if (iteration % configSettings.batchProcessFreq == 0)
             {
-                processManager.createProcess("process" + std::to_string(i), configSettings.minIns, configSettings.maxIns);
+                processManager.createProcess("process" + std::to_string(i), configSettings.minIns, configSettings.maxIns, getRandomInRange(configSettings.minMemPerProc, configSettings.maxMemPerProc));
                 i++;
             }
 
@@ -167,7 +188,7 @@ private:
         {
             if (iteration % configSettings.batchProcessFreq == 0)
             {
-                processManager.createProcess("process" + std::to_string(i), configSettings.minIns, configSettings.maxIns);
+                processManager.createProcess("process" + std::to_string(i), configSettings.minIns, configSettings.maxIns, getRandomInRange(configSettings.minMemPerProc, configSettings.maxMemPerProc));
                 i++;
             }
 
@@ -209,6 +230,10 @@ public:
         int minIns;
         int maxIns;
         int delaysPerExec;
+        int maxOverallMem;
+        int memPerFrame;
+        int minMemPerProc;
+        int maxMemPerProc;
     };
 
     static ConfigSettings configSettings;
@@ -291,6 +316,31 @@ public:
                     return;
                 }
                 FCFSScheduler::setDelayPerExec(configSettings.delaysPerExec);
+            } else if (key == "max-overall-mem") {
+                iss >> configSettings.maxOverallMem;
+                if (configSettings.maxOverallMem < 2 || configSettings.maxOverallMem > std::numeric_limits<int>::max()) {
+                    std::cout << "Error: max-overall-mem must be between 2 and 2^32\n";
+                    return;
+                }
+            } else if (key == "mem-per-frame") {
+                iss >> configSettings.memPerFrame;
+                if (configSettings.memPerFrame < 2 || configSettings.memPerFrame > std::numeric_limits<int>::max()) {
+                    std::cout << "Error: mem-per-frame must be between 2 and 2^32\n";
+                    return;
+                }
+
+            } else if (key == "min-mem-per-proc") {
+                iss >> configSettings.minMemPerProc;
+                if (configSettings.minMemPerProc < 2 || configSettings.minMemPerProc > std::numeric_limits<int>::max()) {
+                    std::cout << "Error: min-mem-per-proc must be between 2 and 2^32\n";
+                    return;
+                }
+            } else if (key == "max-mem-per-proc") {
+                iss >> configSettings.maxMemPerProc;
+                if (configSettings.maxMemPerProc < 2 || configSettings.maxMemPerProc > std::numeric_limits<int>::max()) {
+                    std::cout << "Error: max-mem-per-proc must be between 2 and 2^32\n";
+                    return;
+                }
             }
         }
 
@@ -312,7 +362,7 @@ public:
 
         if (option == "-s")
             {
-                bool created = processManager.createProcess(name, configSettings.minIns, configSettings.maxIns);
+                bool created = processManager.createProcess(name, configSettings.minIns, configSettings.maxIns, getRandomInRange(configSettings.minMemPerProc, configSettings.maxMemPerProc));
                 if (created)
                 {
                     system("cls");

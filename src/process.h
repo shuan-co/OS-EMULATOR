@@ -24,6 +24,9 @@ struct Process
     std::time_t creationTime;
     int pid;
     int cpu;
+    int mem;
+    int memLocStart;
+    int memLocEnd;
 
     std::string getTimestamp() const
     {
@@ -63,14 +66,12 @@ struct Process
 class ProcessQueue
 {
 private:
-    std::queue<Process *> processes;
-    std::mutex mtx;
-    std::condition_variable cv;
-    
-
+    std::queue<Process *> processes; // Queue to hold processes
+    std::mutex mtx;                  // Mutex for thread safety
+    std::condition_variable cv;      // Condition variable for synchronization
 
 public:
-    static int quantumSplice;
+    static int quantumSplice; // Quantum time slice for scheduling
 
     static void setQuantumSplice(int quantum)
     {
@@ -81,45 +82,227 @@ public:
     {
         std::unique_lock<std::mutex> lock(mtx);
         processes.push(process);
-        cv.notify_one();
+        cv.notify_one(); // Notify one waiting thread that a new process has been added
     }
 
     Process *getProcessFCFS()
     {
         std::unique_lock<std::mutex> lock(mtx);
         cv.wait(lock, [this]
-                { return !processes.empty(); });
-        Process *process = processes.front();
-        processes.pop();
+                { return !processes.empty(); }); // Wait until a process is available
+        Process *process = processes.front();    // Get the front process
+        processes.pop();                         // Remove it from the queue
         return process;
     }
 
-    Process* getProcessRR()
+    Process *getProcessRR()
     {
         std::unique_lock<std::mutex> lock(mtx);
-        if (processes.empty()) return nullptr;
-        Process* process = processes.front();
-        processes.pop();
+        if (processes.empty())
+            return nullptr;                   // Return null if the queue is empty
+        Process *process = processes.front(); // Get the front process
+        processes.pop();                      // Remove it from the queue
         return process;
     }
 
     bool isEmpty()
     {
         std::lock_guard<std::mutex> lock(mtx);
-        return processes.empty();
+        return processes.empty(); // Check if the queue is empty
     }
 
-        std::vector<Process *> getProcessesSnapshot()
+    std::vector<Process *> getProcessesSnapshot()
     {
         std::lock_guard<std::mutex> lock(mtx);
-        std::queue<Process *> tempQueue = processes;
-        std::vector<Process *> snapshot;
+        std::queue<Process *> tempQueue = processes; // Create a temporary queue
+        std::vector<Process *> snapshot;             // Vector to hold the snapshot of processes
         while (!tempQueue.empty())
         {
-            snapshot.push_back(tempQueue.front());
-            tempQueue.pop();
+            snapshot.push_back(tempQueue.front()); // Add each process to the snapshot
+            tempQueue.pop();                       // Remove it from the temporary queue
         }
         return snapshot;
+    }
+
+    // Move a specific process to the back of the queue
+    void moveToBack(Process *process)
+    {
+        std::unique_lock<std::mutex> lock(mtx);
+        std::queue<Process *> tempQueue;
+
+        // Move all processes to a temporary queue, excluding the one we want to move
+        while (!processes.empty())
+        {
+            if (processes.front() != process)
+            {
+                tempQueue.push(processes.front());
+            }
+            processes.pop();
+        }
+
+        // Push the process to the back of the temporary queue
+        tempQueue.push(process);
+
+        // Restore the original queue with the modified order
+        processes = tempQueue;
+    }
+};
+
+class MemoryManager
+{
+private:
+    const int MAX_OVERALL_MEM = 16384; // Total memory size in bytes
+    std::vector<int> memory;           // Memory representation
+    int processCount;                  // Number of processes in memory
+    int totalFragmentation;            // Total external fragmentation in KB
+    int logCounter;                    // Counter for log files
+    std::mutex memMutex;
+    std::condition_variable memCondVar;
+    bool isMemoryFreed = true; // Flag to check if memory has been freed
+
+public:
+    MemoryManager()
+        : memory(MAX_OVERALL_MEM, -1), processCount(0), totalFragmentation(0), logCounter(0) {}
+
+    std::pair<int, int> addToMemory(Process &process)
+    {
+        std::unique_lock<std::mutex> lock(memMutex);
+
+        int requiredMemory = process.mem;
+        int startIdx = -1;
+
+        // First-fit allocation
+        for (int i = 0; i <= memory.size() - requiredMemory; ++i)
+        {
+            bool fit = true;
+            for (int j = 0; j < requiredMemory; ++j)
+            {
+                if (memory[i + j] != -1)
+                {
+                    fit = false;
+                    break;
+                }
+            }
+
+            if (fit)
+            {
+                startIdx = i;
+                for (int j = 0; j < requiredMemory; ++j)
+                {
+                    memory[i + j] = process.pid;
+                }
+                process.memLocStart = startIdx;
+                process.memLocEnd = startIdx + requiredMemory - 1;
+                processCount++;
+                isMemoryFreed = false; // Memory is now occupied
+                break;
+            }
+        }
+
+        if (startIdx == -1)
+        {
+            throw std::runtime_error("Not enough memory to allocate for process.");
+        }
+
+        return {process.memLocStart, process.memLocEnd};
+    }
+
+    void logMemorySnapshot()
+    {
+        std::lock_guard<std::mutex> lock(memMutex);
+
+        std::string filename = "./logs/memory_stamp_" + std::to_string(logCounter) + ".txt";
+
+        if (std::ifstream(filename.c_str()))
+        {
+            std::cout << "Log file already exists: " << filename << ", skipping log creation.\n";
+            return;
+        }
+
+        std::ofstream logFile(filename);
+        if (logFile.is_open())
+        {
+            std::time_t now = std::time(nullptr);
+            std::tm *timeInfo = std::localtime(&now);
+            logFile << "Timestamp: " << std::put_time(timeInfo, "(%m/%d/%Y %I:%M:%S %p)") << "\n";
+            logFile << "Number of processes in memory: " << processCount << "\n";
+            logFile << "Total external fragmentation in KB: " << totalFragmentation << "\n";
+
+            logFile << "\n----end---- = " << MAX_OVERALL_MEM << "\n";
+
+            for (size_t i = 0; i < memory.size(); ++i)
+            {
+                if (memory[i] != -1)
+                {
+                    int pid = memory[i];
+                    int startIdx = i;
+
+                    while (i < memory.size() && memory[i] == pid)
+                    {
+                        i++;
+                    }
+                    int endIdx = i;
+
+                    logFile << "\n" << (MAX_OVERALL_MEM - startIdx) << "\n";
+                    logFile << pid << "\n";
+                    logFile << (MAX_OVERALL_MEM - endIdx) << "\n\n";
+                }
+            }
+
+            logFile << "\n----start---- = 0\n";
+
+            logFile.close();
+        }
+        else
+        {
+            std::cerr << "Error: Unable to open log file: " << filename << std::endl;
+        }
+
+        logCounter++;
+    }
+
+    int getProcessCount() const
+    {
+        return processCount;
+    }
+
+    int getTotalFragmentation() const
+    {
+        return totalFragmentation;
+    }
+
+    void freeMemory(int pid)
+    {
+        std::unique_lock<std::mutex> lock(memMutex);
+
+        for (size_t i = 0; i < memory.size(); ++i)
+        {
+            if (memory[i] == pid)
+            {
+                memory[i] = -1;
+            }
+        }
+        processCount--;
+
+        isMemoryFreed = true;
+        memCondVar.notify_all();
+    }
+
+    void visualizeMemory()
+    {
+        std::lock_guard<std::mutex> lock(memMutex);
+        for (size_t i = 0; i < memory.size(); ++i)
+        {
+            if (memory[i] == -1)
+            {
+                std::cout << "[Free]";
+            }
+            else
+            {
+                std::cout << "[" << memory[i] << "]";
+            }
+        }
+        std::cout << "\n";
     }
 };
 
@@ -136,6 +319,7 @@ private:
     static int runningWorkersCount;
     static std::vector<int> availableCores;
     static int delayPerExec;
+    static MemoryManager memoryManager;
 
     static void initializeCores() {
         availableCores.clear();
@@ -160,6 +344,8 @@ private:
                 {
                     continue;
                 }
+
+                // Retrieve process from the queue based on scheduling policy
                 if (useRoundRobin)
                 {
                     processPtr = processQueue.getProcessRR();
@@ -170,51 +356,78 @@ private:
                 }
 
                 // Assign CPU cores in round-robin order
-                if (!availableCores.empty()) {
+                if (!availableCores.empty())
+                {
                     processPtr->cpu = availableCores.front();
                     availableCores.erase(availableCores.begin());
                 }
-                
 
                 // Increment runningWorkersCount as this thread is now running a process
                 ++runningWorkersCount;
             }
 
-            int timeSpent = 0;
-            while (processPtr->currentLine < processPtr->totalLines &&
-                   (!useRoundRobin || timeSpent < processQueue.quantumSplice))
+            // Try to allocate memory for the process
+            try
             {
-                cycleCount++;
+                std::pair<int, int> memoryLocations = memoryManager.addToMemory(*processPtr);
+                processPtr->memLocStart = memoryLocations.first; // Set the memory start location
+                processPtr->memLocEnd = memoryLocations.second;  // Set the memory end location
 
-                 // Only execute instruction after X delay cycles + 1 execution cycle
-                if (cycleCount % (delayPerExec + 1) == 0)  // Execute on the cycle after X delay cycles
+                int timeSpent = 0;
+                while (processPtr->currentLine < processPtr->totalLines &&
+                       (!useRoundRobin || timeSpent < processQueue.quantumSplice))
                 {
-                    processPtr->printLogs(processPtr->cpu);
+                    cycleCount++;
+
+                    // Only execute instruction after X delay cycles + 1 execution cycle
+                    if (cycleCount % (delayPerExec + 1) == 0) // Execute on the cycle after X delay cycles
                     {
-                        std::unique_lock<std::mutex> lock(startStopMtx);
-                        processPtr->currentLine++;
+                        processPtr->printLogs(processPtr->cpu);
+                        {
+                            std::unique_lock<std::mutex> lock(startStopMtx);
+                            processPtr->currentLine++;
+                        }
+                        timeSpent++;
                     }
-                    timeSpent++;
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
 
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                if (timeSpent == processQueue.quantumSplice)
+                {
+                    memoryManager.logMemorySnapshot();
+                }
+
+                // Decrement runningWorkersCount as the process has finished or yielded
+                {
+                    std::unique_lock<std::mutex> lock(startStopMtx);
+                    availableCores.push_back(processPtr->cpu);
+                    std::sort(availableCores.begin(), availableCores.end());
+                    processPtr->cpu = -1;
+                    --runningWorkersCount;
+                }
+
+                if (useRoundRobin && processPtr->currentLine < processPtr->totalLines)
+                {
+                    processQueue.addProcess(processPtr);
+                }
+
+                // Free memory after the process is done executing (optional)
+                memoryManager.freeMemory(processPtr->pid);
             }
-            // processPtr->cpu = -1;
-            // Decrement runningWorkersCount as the process has finished or yielded
+            catch (const std::runtime_error &e)
             {
-                std::unique_lock<std::mutex> lock(startStopMtx);
-                availableCores.push_back(processPtr->cpu);
-                std::sort(availableCores.begin(), availableCores.end());
-                processPtr->cpu = -1;
-                --runningWorkersCount;
+                // If memory allocation fails, move the process back to the queue
+                processQueue.moveToBack(processPtr);
+                // Decrement runningWorkersCount since we didn't execute the process
+                {
+                    std::unique_lock<std::mutex> lock(startStopMtx);
+                    availableCores.push_back(processPtr->cpu);
+                    std::sort(availableCores.begin(), availableCores.end());
+                    processPtr->cpu = -1;
+                    --runningWorkersCount;
+                }
             }
-
-            if (useRoundRobin && processPtr->currentLine < processPtr->totalLines)
-            {
-                processQueue.addProcess(processPtr);
-            }
-
-
         }
     }
 
@@ -300,6 +513,7 @@ std::vector<std::thread> FCFSScheduler::workerThreads;
 bool FCFSScheduler::running = false;
 std::mutex FCFSScheduler::startStopMtx;
 std::vector<int> FCFSScheduler:: availableCores;
+MemoryManager FCFSScheduler::memoryManager;
 
 class ProcessManager
 {
@@ -307,7 +521,7 @@ private:
     std::unordered_map<std::string, Process> processes;
 
 public:
-    bool createProcess(const std::string &name, const int min, const int max)
+    bool createProcess(const std::string &name, const int min, const int max, const int mem)
     {
         if (processes.find(name) == processes.end())
         {
@@ -317,8 +531,7 @@ public:
 
             int max_instruction_lines = distr(gen); 
             int newPid = processes.size();
-            Process newProcess{name, 0, max_instruction_lines, std::time(nullptr), newPid};
-            newProcess.cpu = -1;
+            Process newProcess{name, 0, max_instruction_lines, std::time(nullptr), newPid, -1, mem};
             processes[name] = newProcess;
             FCFSScheduler::addProcessToQueue(&processes[name]);
             return true;
