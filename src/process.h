@@ -152,7 +152,7 @@ class MemoryManager
 {
 private:
     const int MAX_OVERALL_MEM = 16384; // Total memory size in bytes
-    std::vector<int> memory;           // Memory representation
+    std::vector<Process *> memory;     // Memory representation with Process pointers
     int processCount;                  // Number of processes in memory
     int totalFragmentation;            // Total external fragmentation in KB
     int logCounter;                    // Counter for log files
@@ -162,22 +162,71 @@ private:
 
 public:
     MemoryManager()
-        : memory(MAX_OVERALL_MEM, -1), processCount(0), totalFragmentation(0), logCounter(0) {}
+        : memory(MAX_OVERALL_MEM, nullptr), processCount(0), totalFragmentation(0), logCounter(0) {}
+
+    int totalFreeMemory()
+    {
+        int totalFree = 0;
+        int currentFreeBlock = 0;
+
+        // Iterate through memory and sum the sizes of all free blocks
+        for (size_t i = 0; i < memory.size(); ++i)
+        {
+            if (memory[i] == nullptr) // Free memory slot
+            {
+                currentFreeBlock++;
+            }
+            else
+            {
+                if (currentFreeBlock > 0)
+                {
+                    totalFree += currentFreeBlock; // Add the current free block to total
+                    currentFreeBlock = 0;          // Reset for the next block
+                }
+            }
+        }
+
+        // If the last block of memory is free, add it as well
+        if (currentFreeBlock > 0)
+        {
+            totalFree += currentFreeBlock;
+        }
+
+        return totalFree; // Return the total free memory available
+    }
 
     std::pair<int, int> addToMemory(Process &process)
     {
         std::unique_lock<std::mutex> lock(memMutex);
 
+        // Check if the process is already in memory
+        for (size_t i = 0; i < memory.size(); ++i)
+        {
+            if (memory[i] != nullptr && memory[i]->pid == process.pid)
+            {
+                // Process already in memory, return its current memory locations
+                return {memory[i]->memLocStart, memory[i]->memLocEnd};
+            }
+        }
+
         int requiredMemory = process.mem;
-        int startIdx = -1;
+        int availableMemory = totalFreeMemory(); 
+
+        // If there is not enough free memory, free the oldest process
+        if (availableMemory < requiredMemory)
+        {
+            freeMemory(getOldestMemoryInProcess());
+            availableMemory = totalFreeMemory(); // Recalculate available memory after freeing
+        }
 
         // First-fit allocation
+        int startIdx = -1;
         for (int i = 0; i <= memory.size() - requiredMemory; ++i)
         {
             bool fit = true;
             for (int j = 0; j < requiredMemory; ++j)
             {
-                if (memory[i + j] != -1)
+                if (memory[i + j] != nullptr) // Check if the slot is already occupied
                 {
                     fit = false;
                     break;
@@ -189,7 +238,7 @@ public:
                 startIdx = i;
                 for (int j = 0; j < requiredMemory; ++j)
                 {
-                    memory[i + j] = process.pid;
+                    memory[i + j] = &process; // Store the process pointer
                 }
                 process.memLocStart = startIdx;
                 process.memLocEnd = startIdx + requiredMemory - 1;
@@ -232,19 +281,21 @@ public:
 
             for (size_t i = 0; i < memory.size(); ++i)
             {
-                if (memory[i] != -1)
+                if (memory[i] != nullptr)
                 {
-                    int pid = memory[i];
+                    Process *process = memory[i]; // Access the process pointer
                     int startIdx = i;
 
-                    while (i < memory.size() && memory[i] == pid)
+                    // Find the end index for this process in memory
+                    while (i < memory.size() && memory[i] == process)
                     {
                         i++;
                     }
                     int endIdx = i;
 
-                    logFile << "\n" << (MAX_OVERALL_MEM - startIdx) << "\n";
-                    logFile << pid << "\n";
+                    logFile << "\n"
+                            << (MAX_OVERALL_MEM - startIdx) << "\n";
+                    logFile << process->pid << "\n"; // Log process ID or other process details
                     logFile << (MAX_OVERALL_MEM - endIdx) << "\n\n";
                 }
             }
@@ -273,36 +324,55 @@ public:
 
     void freeMemory(int pid)
     {
-        std::unique_lock<std::mutex> lock(memMutex);
-
         for (size_t i = 0; i < memory.size(); ++i)
         {
-            if (memory[i] == pid)
+            if (memory[i] != nullptr && memory[i]->pid == pid)
             {
-                memory[i] = -1;
+                memory[i] = nullptr; // Free memory by setting pointer to nullptr
             }
         }
         processCount--;
-
         isMemoryFreed = true;
         memCondVar.notify_all();
     }
+
 
     void visualizeMemory()
     {
         std::lock_guard<std::mutex> lock(memMutex);
         for (size_t i = 0; i < memory.size(); ++i)
         {
-            if (memory[i] == -1)
+            if (memory[i] == nullptr)
             {
                 std::cout << "[Free]";
             }
             else
             {
-                std::cout << "[" << memory[i] << "]";
+                std::cout << "[" << memory[i]->pid << "]"; // Print PID or other process details
             }
         }
         std::cout << "\n";
+    }
+
+    int getOldestMemoryInProcess()
+    {
+        int oldestPid = -1;                      // Default value if no processes are found
+        std::time_t oldestTime = std::time_t(0); // Initialize to the current time
+
+        for (size_t i = 0; i < memory.size(); ++i)
+        {
+            if (memory[i] != nullptr)
+            {
+                Process *process = memory[i];
+                if (oldestPid == -1 || process->creationTime < oldestTime)
+                {
+                    oldestPid = process->pid;
+                    oldestTime = process->creationTime;
+                }
+            }
+        }
+
+        return oldestPid;
     }
 };
 
@@ -370,6 +440,7 @@ private:
             // Try to allocate memory for the process
             try
             {
+                
                 std::pair<int, int> memoryLocations = memoryManager.addToMemory(*processPtr);
                 processPtr->memLocStart = memoryLocations.first; // Set the memory start location
                 processPtr->memLocEnd = memoryLocations.second;  // Set the memory end location
@@ -414,10 +485,11 @@ private:
                 }
 
                 // Free memory after the process is done executing (optional)
-                memoryManager.freeMemory(processPtr->pid);
+                //memoryManager.freeMemory(processPtr->pid);
             }
             catch (const std::runtime_error& e)
             {
+                printf("Error: %s\n", e.what());
                 // If memory allocation fails, move the process back to the queue
                 processQueue.moveToBack(processPtr);
                 // Decrement runningWorkersCount since we didn't execute the process
