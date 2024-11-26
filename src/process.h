@@ -334,7 +334,7 @@ private:
         std::unordered_map<int, bool> processAllocated;
         while (true)
         {
-            Process *processPtr = nullptr;
+            Process* processPtr = nullptr;
             {
                 std::unique_lock<std::mutex> lock(startStopMtx);
                 if (!running && processQueue.isEmpty())
@@ -367,75 +367,68 @@ private:
                 ++runningWorkersCount;
             }
 
-            if (!processAllocated[processPtr->pid]) {
+            // Try to allocate memory for the process
+            try
+            {
+                std::pair<int, int> memoryLocations = memoryManager.addToMemory(*processPtr);
+                processPtr->memLocStart = memoryLocations.first; // Set the memory start location
+                processPtr->memLocEnd = memoryLocations.second;  // Set the memory end location
 
-                // Try to allocate memory for the process
-                try
+                int timeSpent = 0;
+                while (processPtr->currentLine < processPtr->totalLines &&
+                    (!useRoundRobin || timeSpent < processQueue.quantumSplice))
                 {
-                    std::pair<int, int> memoryLocations = memoryManager.addToMemory(*processPtr);
-                    processPtr->memLocStart = memoryLocations.first; // Set the memory start location
-                    processPtr->memLocEnd = memoryLocations.second;  // Set the memory end location
-                    processAllocated[processPtr->pid] = true;
-                }
-                catch (const std::runtime_error& e)
-                {
-                    // If memory allocation fails, move the process back to the queue
-                    processQueue.moveToBack(processPtr);
-                    // Decrement runningWorkersCount since we didn't execute the process
+                    cycleCount++;
+
+                    // Only execute instruction after X delay cycles + 1 execution cycle
+                    if (cycleCount % (delayPerExec + 1) == 0) // Execute on the cycle after X delay cycles
                     {
-                        std::unique_lock<std::mutex> lock(startStopMtx);
-                        availableCores.push_back(processPtr->cpu);
-                        std::sort(availableCores.begin(), availableCores.end());
-                        processPtr->cpu = -1;
-                        --runningWorkersCount;
+                        processPtr->printLogs(processPtr->cpu);
+                        {
+                            std::unique_lock<std::mutex> lock(startStopMtx);
+                            processPtr->currentLine++;
+                        }
+                        timeSpent++;
                     }
-                    continue; 
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
-            }
 
-            int timeSpent = 0;
-            while (processPtr->currentLine < processPtr->totalLines &&
-                (!useRoundRobin || timeSpent < processQueue.quantumSplice))
-            {
-                cycleCount++;
-
-                // Only execute instruction after X delay cycles + 1 execution cycle
-                if (cycleCount % (delayPerExec + 1) == 0) // Execute on the cycle after X delay cycles
+                if (timeSpent == processQueue.quantumSplice)
                 {
-                    processPtr->printLogs(processPtr->cpu);
-                    {
-                        std::unique_lock<std::mutex> lock(startStopMtx);
-                        processPtr->currentLine++;
-                    }
-                    timeSpent++;
+                    memoryManager.logMemorySnapshot();
                 }
 
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
+                // Decrement runningWorkersCount as the process has finished or yielded
+                {
+                    std::unique_lock<std::mutex> lock(startStopMtx);
+                    availableCores.push_back(processPtr->cpu);
+                    std::sort(availableCores.begin(), availableCores.end());
+                    processPtr->cpu = -1;
+                    --runningWorkersCount;
+                }
 
-            if (timeSpent == processQueue.quantumSplice)
-            {
-                memoryManager.logMemorySnapshot();
-            }
+                if (useRoundRobin && processPtr->currentLine < processPtr->totalLines)
+                {
+                    processQueue.addProcess(processPtr);
+                }
 
-            // Decrement runningWorkersCount as the process has finished or yielded
-            {
-                std::unique_lock<std::mutex> lock(startStopMtx);
-                availableCores.push_back(processPtr->cpu);
-                std::sort(availableCores.begin(), availableCores.end());
-                processPtr->cpu = -1;
-                --runningWorkersCount;
-            }
-
-            if (processPtr->currentLine >= processPtr->totalLines)
-            {
+                // Free memory after the process is done executing (optional)
                 memoryManager.freeMemory(processPtr->pid);
-                processAllocated[processPtr->pid] = false;
-            } else if (useRoundRobin && processPtr->currentLine < processPtr->totalLines)
-            {
-                processQueue.addProcess(processPtr);
             }
-
+            catch (const std::runtime_error& e)
+            {
+                // If memory allocation fails, move the process back to the queue
+                processQueue.moveToBack(processPtr);
+                // Decrement runningWorkersCount since we didn't execute the process
+                {
+                    std::unique_lock<std::mutex> lock(startStopMtx);
+                    availableCores.push_back(processPtr->cpu);
+                    std::sort(availableCores.begin(), availableCores.end());
+                    processPtr->cpu = -1;
+                    --runningWorkersCount;
+                }
+            }
         }
     }
 
