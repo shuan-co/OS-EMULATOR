@@ -322,13 +322,14 @@ public:
                     std::cout << "Error: max-overall-mem must be between 2 and 2^32\n";
                     return;
                 }
+                FCFS_H::MemoryManager::setMaxOverallMem(configSettings.maxOverallMem);
             } else if (key == "mem-per-frame") {
                 iss >> configSettings.memPerFrame;
                 if (configSettings.memPerFrame < 2 || configSettings.memPerFrame > std::numeric_limits<int>::max()) {
                     std::cout << "Error: mem-per-frame must be between 2 and 2^32\n";
                     return;
                 }
-
+                FCFS_H::MemoryManager::setMemoryPerFrame(configSettings.memPerFrame);
             } else if (key == "min-mem-per-proc") {
                 iss >> configSettings.minMemPerProc;
                 if (configSettings.minMemPerProc < 2 || configSettings.minMemPerProc > std::numeric_limits<int>::max()) {
@@ -610,8 +611,27 @@ public:
         }
     }
 
-    // Executer
-    static void execute(const string& command, ProgramState& programState)
+    // Get Overall Processes SMI
+    static void processesSMI(const std::string& args, ProgramState& state)
+    {
+        cout << "-----------------------------------------------" << endl;
+        cout << "| PROCESSES-SMI V01.00 Driver Version: 01.100 |" << endl;
+        cout << "-----------------------------------------------" << endl;
+        cout << "CPU-Util: " << (static_cast<double>(FCFSScheduler::getRunningWorkersCount()) / FCFSScheduler::getCPUThreads()) * 100 << "%" << endl;
+        cout << "Memory Usage: " << FCFS_H::MemoryManager::getMemoryUsed() << "MiB / " << FCFS_H::MemoryManager::getOverallMemory() << "MiB" << endl;
+        cout << "Memory-Util: " << (static_cast<double>(FCFS_H::MemoryManager::getMemoryUsed()) / FCFS_H::MemoryManager::getOverallMemory()) * 100 << "%" << endl;
+
+        cout << "===============================================" << endl;
+        cout << "Running Processes and Memory Usage:" << endl;
+        cout << "-----------------------------------------------" << endl;
+        for (const auto& process : FCFS_H::MemoryManager::getUniqueRunningProcesses()){
+            cout << process->name << " " << process->mem << "MiB" << endl;
+        }
+        cout << "-----------------------------------------------" << endl;
+    }
+
+        // Executer
+    static void execute(const string &command, ProgramState &programState)
     {
         /*
             Create Association Mapping between string command syntax and static void function executions
@@ -625,6 +645,7 @@ public:
             {"scheduler-stop", Commands::schedulerStop},
             {"report-util", Commands::reportUtil},
             {"process-smi", Commands::processSMI},
+            {"processes-smi", Commands::processesSMI},
             {"debug-scheduler", Commands::debugSchedulerTest},
             // Marquee Console Sampler
             {"marquee-console", Commands::marqueeConsole},

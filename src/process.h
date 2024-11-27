@@ -153,8 +153,11 @@ public:
 class MemoryManager
 {
 private:
-    const int MAX_OVERALL_MEM = 16384; // Total memory size in bytes
-    std::vector<Process *> memory;     // Memory representation with Process pointers
+    static int MAX_OVERALL_MEM; // Total memory size in bytes
+    static int MEMORY_PER_FRAME;
+    static int mode;
+    static std::vector<Process *> memory;     // Memory representation with Process pointers
+    static std::vector<Process *> runningProcesses; // Running processes in memory
     int processCount;                  // Number of processes in memory
     int totalFragmentation;            // Total external fragmentation in KB
     int logCounter;                    // Counter for log files
@@ -221,11 +224,46 @@ private:
         {
             std::cerr << "Failed to create swap file for process " << process->pid << std::endl;
         }
+        Sleep(100); // Simulated Delay
     }
 
 public:
     MemoryManager()
-        : memory(MAX_OVERALL_MEM, nullptr), processCount(0), totalFragmentation(0), logCounter(0) {}
+        : processCount(0), totalFragmentation(0), logCounter(0) {}
+
+    static int getMemoryUsed()
+    {
+        int memoryUsed = 0;
+        for (size_t i = 0; i < memory.size(); ++i)
+        {
+            if (memory[i] != nullptr)
+            {
+                memoryUsed++;
+            }
+        }
+        return memoryUsed;
+    }
+
+    static int getOverallMemory()
+    {
+        return MAX_OVERALL_MEM;
+    }
+
+    static std::vector<Process *> getUniqueRunningProcesses(){
+        std::vector<Process *> uniqueProcesses;
+        for (size_t i = 0; i < memory.size(); ++i)
+        {
+            if (memory[i] != nullptr)
+            {
+                Process *process = memory[i];
+                if (std::find(uniqueProcesses.begin(), uniqueProcesses.end(), process) == uniqueProcesses.end())
+                {
+                    uniqueProcesses.push_back(process);
+                }
+            }
+        }
+        return uniqueProcesses;
+    }
 
     int totalFreeMemory()
     {
@@ -262,79 +300,106 @@ public:
     {
         std::unique_lock<std::mutex> lock(memMutex);
 
-        // Check if the process is already in memory
-        for (size_t i = 0; i < memory.size(); ++i)
+        // 
+        if (mode == 0)
         {
-            if (memory[i] != nullptr && memory[i]->pid == process.pid)
+            // Check if the process is already in memory
+            for (size_t i = 0; i < memory.size(); ++i)
             {
-                // Process already in memory, return its current memory locations
-                return {memory[i]->memLocStart, memory[i]->memLocEnd};
-            }
-        }
-
-        // Check if the process is in swap space
-        std::string swapFileName = "./swap/" + std::to_string(process.pid) + ".csopesy";
-        std::ifstream swapFile(swapFileName);
-
-        if (swapFile.good())
-        {
-            swapFile.close();
-            if (std::remove(swapFileName.c_str()) != 0)
-            {
-                std::cerr << "Error deleting swap file for process " << process.pid << ": " << swapFileName << std::endl;
-            }
-
-            // Return dummy memory locations since process is not in memory but was in swap space
-            return {-1, -1}; // Adjust this return value based on your system's conventions
-        }
-
-        int requiredMemory = process.mem;
-        int availableMemory = totalFreeMemory(); 
-        
-        // If there is not enough free memory, free the oldest process
-        if (availableMemory < requiredMemory)
-        {
-            int oldestPID = getOldestMemoryInProcess();
-            freeMemory(oldestPID);
-            availableMemory = totalFreeMemory(); // Recalculate available memory after freeing
-            writeToSwapFile(&process);           // Write the process's memory to a swap file
-        }
-
-        // First-fit allocation
-        int startIdx = -1;
-        for (int i = 0; i <= memory.size() - requiredMemory; ++i)
-        {
-            bool fit = true;
-            for (int j = 0; j < requiredMemory; ++j)
-            {
-                if (memory[i + j] != nullptr) // Check if the slot is already occupied
+                if (memory[i] != nullptr && memory[i]->pid == process.pid)
                 {
-                    fit = false;
+                    // Process already in memory, return its current memory locations
+                    return {memory[i]->memLocStart, memory[i]->memLocEnd};
+                }
+            }
+
+            // Check if the process is in swap space
+            std::string swapFileName = "./swap/" + std::to_string(process.pid) + ".csopesy";
+            std::ifstream swapFile(swapFileName);
+
+            if (swapFile.good())
+            {
+                swapFile.close();
+                if (std::remove(swapFileName.c_str()) != 0)
+                {
+                    std::cerr << "Error deleting swap file for process " << process.pid << ": " << swapFileName << std::endl;
+                }
+                Sleep(100); // Simulated Delay
+                // Return dummy memory locations since process is not in memory but was in swap space
+                return {-1, -1};
+            }
+
+            int requiredMemory = process.mem;
+            int availableMemory = totalFreeMemory();
+
+            // If there is not enough free memory, try to remove processes
+            if (availableMemory < requiredMemory)
+            {
+                // Get processes to remove based on available memory
+                std::vector<Process *> processesToRemove = getOldestMemoryInProcess(requiredMemory);
+
+                if (processesToRemove.empty())
+                {
+                    return {-1, -1}; // Not enough memory even after considering removable processes
+                }
+
+                // Write processes to swap space before freeing memory
+                for (Process *processToRemove : processesToRemove)
+                {
+                    writeToSwapFile(processToRemove); // Write to swap before removing
+                    freeMemory(processToRemove->pid); // Remove from memory
+                }
+
+                // Now we are certain that there is enough memory for the new process
+            }
+
+            // First-fit allocation
+            int startIdx = -1;
+            for (int i = 0; i <= memory.size() - requiredMemory; ++i)
+            {
+                bool fit = true;
+                for (int j = 0; j < requiredMemory; ++j)
+                {
+                    if (memory[i + j] != nullptr) // Check if the slot is already occupied
+                    {
+                        fit = false;
+                        break;
+                    }
+                }
+
+                if (fit)
+                {
+                    startIdx = i;
+                    for (int j = 0; j < requiredMemory; ++j)
+                    {
+                        memory[i + j] = &process; // Store the process pointer
+                    }
+                    process.memLocStart = startIdx;
+                    process.memLocEnd = startIdx + requiredMemory - 1;
+                    processCount++;
                     break;
                 }
             }
 
-            if (fit)
+            if (startIdx == -1)
             {
-                startIdx = i;
-                for (int j = 0; j < requiredMemory; ++j)
-                {
-                    memory[i + j] = &process; // Store the process pointer
-                }
-                process.memLocStart = startIdx;
-                process.memLocEnd = startIdx + requiredMemory - 1;
-                processCount++;
-                isMemoryFreed = false; // Memory is now occupied
-                break;
+                return {-1, -1}; // Memory allocation failed
             }
-        }
 
-        if (startIdx == -1)
-        {
-            throw std::runtime_error("Not enough memory to allocate for process.");
-        }
+            return {process.memLocStart, process.memLocEnd};
+        } else {
 
-        return {process.memLocStart, process.memLocEnd};
+
+        }
+    }
+
+    static void addRunningProcess(Process *process)
+    {
+        runningProcesses.push_back(process);
+    }
+    static void removeRunningProcess(Process *process)
+    {
+        runningProcesses.erase(std::remove(runningProcesses.begin(), runningProcesses.end(), process), runningProcesses.end());
     }
 
     void logMemorySnapshot()
@@ -441,25 +506,90 @@ public:
         std::cout << "\n";
     }
 
-    int getOldestMemoryInProcess()
+    std::vector<Process *> getOldestMemoryInProcess(int requiredMemory)
     {
-        int oldestPid = -1;                      // Default value if no processes are found
-        std::time_t oldestTime = std::time_t(0); // Initialize to the current time
+        std::vector<Process *> processesToRemove;
+        int availableMemory = 0;
 
+        // Iterate through memory and find processes to remove
         for (size_t i = 0; i < memory.size(); ++i)
         {
-            if (memory[i] != nullptr)
+            if (memory[i] != nullptr) // If memory slot is occupied
             {
                 Process *process = memory[i];
-                if (oldestPid == -1 || process->creationTime < oldestTime)
+
+                // Check if the process is running, if so, stop and don't add it to the removal list
+                bool isRunning = false;
+                for (Process *p : runningProcesses)
                 {
-                    oldestPid = process->pid;
-                    oldestTime = process->creationTime;
+                    if (p->pid == process->pid)
+                    {
+                        isRunning = true;
+                        break;
+                    }
+                }
+
+                // If the process is running, skip removal for this process
+                if (isRunning)
+                {
+                    continue;
+                }
+
+                // Add the process to the removal list and accumulate free space
+                processesToRemove.push_back(process);
+                int freeSpace = 0;
+
+                // Count how much space this process occupies
+                for (size_t j = i; j < memory.size(); ++j)
+                {
+                    if (memory[j] == process)
+                    {
+                        freeSpace++;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                availableMemory += freeSpace;
+
+                // If enough space has been freed, stop and return the list of processes to remove
+                if (availableMemory >= requiredMemory)
+                {
+                    break;
                 }
             }
         }
 
-        return oldestPid;
+        // If enough memory is freed, return the list of processes to remove, otherwise return an empty list
+        if (availableMemory >= requiredMemory)
+        {
+            return processesToRemove;
+        }
+        else
+        {
+            return {}; // Not enough space available after considering processes
+        }
+    }
+
+
+    static void setMaxOverallMem(int value)
+    {
+        MAX_OVERALL_MEM = value;
+        memory.resize(MAX_OVERALL_MEM);
+    }
+    static void setMemoryPerFrame(int value)
+    {
+        MEMORY_PER_FRAME = value;
+        if (MAX_OVERALL_MEM == MEMORY_PER_FRAME)
+        {
+            mode = 0; // Flat Memory
+        }
+        else
+        {
+            mode = 1; // Paging Mode
+        }
     }
 };
 
@@ -531,7 +661,7 @@ private:
                 std::pair<int, int> memoryLocations = memoryManager.addToMemory(*processPtr);
                 processPtr->memLocStart = memoryLocations.first; // Set the memory start location
                 processPtr->memLocEnd = memoryLocations.second;  // Set the memory end location
-
+                memoryManager.addRunningProcess(processPtr);
                 int timeSpent = 0;
                 while (processPtr->currentLine < processPtr->totalLines &&
                     (!useRoundRobin || timeSpent < processQueue.quantumSplice))
@@ -570,6 +700,9 @@ private:
                 {
                     processQueue.addProcess(processPtr);
                 }
+
+                // Process Done Executing
+                memoryManager.removeRunningProcess(processPtr);
 
                 // Free memory after the process is done executing (optional)
                 if (processPtr->currentLine >= processPtr->totalLines)
@@ -678,6 +811,11 @@ bool FCFSScheduler::running = false;
 std::mutex FCFSScheduler::startStopMtx;
 std::vector<int> FCFSScheduler:: availableCores;
 MemoryManager FCFSScheduler::memoryManager;
+int MemoryManager::MAX_OVERALL_MEM;
+int MemoryManager::MEMORY_PER_FRAME;
+int MemoryManager::mode;
+std::vector<Process *> MemoryManager::memory;
+std::vector<Process *> MemoryManager::runningProcesses;
 
 class ProcessManager
 {
