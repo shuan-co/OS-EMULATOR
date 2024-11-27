@@ -15,6 +15,8 @@
 #include <sstream>
 #include <random>
 #include <unordered_map>
+#include <cstdlib>
+#include <windows.h>
 
 struct Process
 {
@@ -160,6 +162,67 @@ private:
     std::condition_variable memCondVar;
     bool isMemoryFreed = true; // Flag to check if memory has been freed
 
+    // Helper function to convert std::string to std::wstring
+    std::wstring stringToWstring(const std::string &str)
+    {
+        return std::wstring(str.begin(), str.end());
+    }
+
+    bool createDirectory(const std::string &path)
+    {
+        std::wstring widePath = stringToWstring(path); // Convert to wide string
+        return CreateDirectory(widePath.c_str(), NULL) || GetLastError() == ERROR_ALREADY_EXISTS;
+    }
+
+    std::string generateRandomMemoryData(int length)
+    {
+        const std::string charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        std::string randomData;
+        randomData.reserve(length);
+
+        for (int i = 0; i < length; ++i)
+        {
+            randomData += charset[rand() % charset.size()];
+        }
+
+        return randomData;
+    }
+
+    // Function to simulate writing a process's memory to a swap file
+    void writeToSwapFile(Process *process)
+    {
+        if (!process)
+        {
+            std::cerr << "Error: Null Process pointer passed to writeToSwapFile." << std::endl;
+            return;
+        }
+
+        // Create the swap directory if it doesn't exist
+        if (!createDirectory("./swap"))
+        {
+            std::cerr << "Error: Failed to create or access the swap directory." << std::endl;
+            return;
+        }
+
+        // Create a swap file for the process
+        std::string swapFileName = "./swap/" + std::to_string(process->pid) + ".csopesy";
+        std::ofstream swapFile(swapFileName);
+
+        if (swapFile.is_open())
+        {
+            // Generate random memory data based on process->currentLine
+            std::string memoryData = generateRandomMemoryData(process->currentLine);
+
+            // Write the memory data to the swap file
+            swapFile << memoryData;
+            swapFile.close();
+        }
+        else
+        {
+            std::cerr << "Failed to create swap file for process " << process->pid << std::endl;
+        }
+    }
+
 public:
     MemoryManager()
         : memory(MAX_OVERALL_MEM, nullptr), processCount(0), totalFragmentation(0), logCounter(0) {}
@@ -209,14 +272,32 @@ public:
             }
         }
 
+        // Check if the process is in swap space
+        std::string swapFileName = "./swap/" + std::to_string(process.pid) + ".csopesy";
+        std::ifstream swapFile(swapFileName);
+
+        if (swapFile.good())
+        {
+            swapFile.close();
+            if (std::remove(swapFileName.c_str()) != 0)
+            {
+                std::cerr << "Error deleting swap file for process " << process.pid << ": " << swapFileName << std::endl;
+            }
+
+            // Return dummy memory locations since process is not in memory but was in swap space
+            return {-1, -1}; // Adjust this return value based on your system's conventions
+        }
+
         int requiredMemory = process.mem;
         int availableMemory = totalFreeMemory(); 
-
+        
         // If there is not enough free memory, free the oldest process
         if (availableMemory < requiredMemory)
         {
-            freeMemory(getOldestMemoryInProcess());
+            int oldestPID = getOldestMemoryInProcess();
+            freeMemory(oldestPID);
             availableMemory = totalFreeMemory(); // Recalculate available memory after freeing
+            writeToSwapFile(&process);           // Write the process's memory to a swap file
         }
 
         // First-fit allocation
@@ -336,7 +417,13 @@ public:
         memCondVar.notify_all();
     }
 
-
+    void clearSwapSpace(int pid){
+        std::string swapFileName = "./swap/" + std::to_string(pid) + ".csopesy";
+        if (std::remove(swapFileName.c_str()) != 0)
+        {
+            return;
+        }
+    }
     void visualizeMemory()
     {
         std::lock_guard<std::mutex> lock(memMutex);
@@ -485,7 +572,11 @@ private:
                 }
 
                 // Free memory after the process is done executing (optional)
-                //memoryManager.freeMemory(processPtr->pid);
+                if (processPtr->currentLine >= processPtr->totalLines)
+                {
+                    memoryManager.freeMemory(processPtr->pid);
+                    memoryManager.clearSwapSpace(processPtr->pid);
+                }
             }
             catch (const std::runtime_error& e)
             {
