@@ -29,7 +29,9 @@ struct Process
     int mem;
     int memLocStart;
     int memLocEnd;
-    std::vector<std::int> pages;
+    std::vector<std::int16_t> pages;
+    int timeStartedInMemory;
+
 
     std::string getTimestamp() const
     {
@@ -166,6 +168,10 @@ private:
     std::condition_variable memCondVar;
     bool isMemoryFreed = true; // Flag to check if memory has been freed
 
+    // Static counters for paged in and paged out pages
+    static int pagedInCount;  // Total number of pages paged in
+    static int pagedOutCount; // Total number of pages paged out
+
     // Helper function to convert std::string to std::wstring
     std::wstring stringToWstring(const std::string &str)
     {
@@ -225,6 +231,9 @@ private:
         {
             std::cerr << "Failed to create swap file for process " << process->pid << std::endl;
         }
+        // Increment paged out counter
+        if (mode == 1)
+            pagedOutCount++;
         Sleep(100); // Simulated Delay
     }
 
@@ -309,6 +318,38 @@ public:
         return totalFree; // Return the total free memory available
     }
 
+
+    int totalFreeFrames()
+    {
+        int totalFree = 0;
+        int currentFreeBlock = 0;
+
+        // Iterate through memory and sum the sizes of all free blocks
+        for (size_t i = 0; i < memory.size(); ++i)
+        {
+            if (memory[i] == nullptr) // Free memory slot
+            {
+                currentFreeBlock++;
+            }
+            else
+            {
+                if (currentFreeBlock > 0)
+                {
+                    totalFree += currentFreeBlock; // Add the current free block to total
+                    currentFreeBlock = 0;          // Reset for the next block
+                }
+            }
+        }
+
+        // If the last block of memory is free, add it as well
+        if (currentFreeBlock > 0)
+        {
+            totalFree += currentFreeBlock;
+        }
+
+        return totalFree; // Return the total free memory available
+    }
+
     std::pair<int, int> addToMemory(Process &process)
     {
         std::unique_lock<std::mutex> lock(memMutex);
@@ -335,13 +376,22 @@ public:
                 std::cerr << "Error deleting swap file for process " << process.pid << ": " << swapFileName << std::endl;
             }
             Sleep(100); // Simulated Delay
+            if (mode == 1)
+                pagedInCount++;
             // Return dummy memory locations since process is not in memory but was in swap space
             return {-1, -1};
         }
 
         int requiredMemory = process.mem;
         int availableMemory = totalFreeMemory();
+        int availableFrames = totalFreeMemory();
         int requiredFrames = requiredMemory / MEMORY_PER_FRAME;
+
+        if ((requiredMemory / MEMORY_PER_FRAME) < 1)
+        {
+            requiredFrames = 1;
+        }
+
         if (mode == 0)
         {
 
@@ -389,6 +439,7 @@ public:
                     }
                     process.memLocStart = startIdx;
                     process.memLocEnd = startIdx + requiredMemory - 1;
+                    process.timeStartedInMemory = std::time(nullptr);
                     processCount++;
                     break;
                 }
@@ -402,7 +453,7 @@ public:
             return {process.memLocStart, process.memLocEnd};
         } else if (mode == 1) {
             // If there is not enough free memory, try to remove processes
-            if (availableMemory < requiredMemory)
+            if (availableFrames < requiredFrames)
             {
                 // Get processes to remove based on available memory
                 std::vector<Process *> processesToRemove = getOldestMemoryInProcess(requiredFrames);
@@ -425,7 +476,6 @@ public:
             // Non-contiguous memory allocation (page/frame allocation)
             int allocatedFrames = 0;
             std::vector<int> allocatedPages;
-
             for (int i = 0; i < memory.size(); ++i)
             {
                 if (memory[i] == nullptr) // Check if the frame is free
@@ -436,9 +486,11 @@ public:
 
                     if (allocatedFrames == requiredFrames)
                     {
+                
                         process.memLocStart = allocatedPages[0];
                         process.memLocEnd = allocatedPages.back();
                         processCount++;
+                        process.timeStartedInMemory = std::time(nullptr);
                         break;
                     }
                 }
@@ -455,6 +507,7 @@ public:
                 return {-1, -1}; // Memory allocation failed
             }
         }
+        return {process.memLocStart, process.memLocEnd};
     }
 
     static void addRunningProcess(Process *process)
@@ -575,73 +628,78 @@ public:
         std::vector<Process *> processesToRemove;
         int availableMemory = 0;
 
-        // Iterate through memory and find processes to remove
+        // Map to store unique processes currently in memory and their `timeStartedInMemory`
+        std::map<int, Process *> uniqueProcesses;
+
+        // Iterate through memory to find unique processes
         for (size_t i = 0; i < memory.size(); ++i)
         {
-            if (memory[i] != nullptr) // If memory slot is occupied
+            if (memory[i] != nullptr)
             {
                 Process *process = memory[i];
-
-                // Check if the process is running, if so, stop and don't add it to the removal list
-                bool isRunning = false;
-                for (Process *p : runningProcesses)
+                // Only insert processes that haven't been added yet
+                if (uniqueProcesses.find(process->pid) == uniqueProcesses.end())
                 {
-                    if (p->pid == process->pid)
-                    {
-                        isRunning = true;
-                        break;
-                    }
-                }
-
-                // If the process is running, skip removal for this process
-                if (isRunning)
-                {
-                    continue;
-                }
-
-                // Add the process to the removal list and accumulate free space
-                processesToRemove.push_back(process);
-                int freeSpace = 0;
-
-                // Count how much space this process occupies
-                for (size_t j = i; j < memory.size(); ++j)
-                {
-                    if (memory[j] == process)
-                    {
-                        freeSpace++;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-
-                availableMemory += freeSpace;
-
-                // If enough space has been freed, stop and return the list of processes to remove
-                if (availableMemory >= requiredMemory)
-                {
-                    break;
+                    uniqueProcesses[process->pid] = process;
                 }
             }
         }
 
-        // If enough memory is freed, return the list of processes to remove, otherwise return an empty list
+        // Extract processes into a vector and sort by `timeStartedInMemory`
+        std::vector<Process *> sortedProcesses;
+        for (std::map<int, Process *>::iterator it = uniqueProcesses.begin(); it != uniqueProcesses.end(); ++it)
+        {
+            Process *process = it->second;
+            sortedProcesses.push_back(process);
+        }
+
+        std::sort(sortedProcesses.begin(), sortedProcesses.end(), [](Process *a, Process *b)
+                  { return a->timeStartedInMemory < b->timeStartedInMemory; });
+
+        // Iterate through sorted processes to find enough memory to free
+        for (Process *process : sortedProcesses)
+        {
+            // Skip running processes
+            if (std::find(runningProcesses.begin(), runningProcesses.end(), process) != runningProcesses.end())
+            {
+                continue;
+            }
+
+            processesToRemove.push_back(process);
+
+            // Calculate memory occupied by this process
+            int freeSpace = 0;
+            for (size_t i = process->memLocStart; i <= process->memLocEnd; ++i)
+            {
+                if (memory[i] == process)
+                {
+                    freeSpace++;
+                }
+            }
+
+            availableMemory += freeSpace;
+
+            // Stop if enough memory is freed
+            if (availableMemory >= requiredMemory)
+            {
+                break;
+            }
+        }
+
+        // If we collected enough processes to free the required memory, return the list
         if (availableMemory >= requiredMemory)
         {
             return processesToRemove;
         }
-        else
-        {
-            return {}; // Not enough space available after considering processes
-        }
-    }
 
+        // Otherwise, return an empty list
+        return {};
+    }
 
     static void setMaxOverallMem(int value)
     {
         MAX_OVERALL_MEM = value;
-        memory.resize(MAX_OVERALL_MEM);
+        memory.resize(MAX_OVERALL_MEM, nullptr);
     }
     static void setMemoryPerFrame(int value)
     {
@@ -653,9 +711,20 @@ public:
         else
         {
             mode = 1; // Paging Mode
-            memory.resize(MAX_OVERALL_MEM / MEMORY_PER_FRAME); // Resize per frame representation
+            memory.resize(MAX_OVERALL_MEM / MEMORY_PER_FRAME, nullptr); // Resize per frame representation
         }
     }
+    // Static getter functions for paged in and paged out values
+    static int getPagedInCount()
+    {
+        return pagedInCount;
+    }
+
+    static int getPagedOutCount()
+    {
+        return pagedOutCount;
+    }
+
 };
 
 class FCFSScheduler
@@ -672,6 +741,11 @@ private:
     static std::vector<int> availableCores;
     static int delayPerExec;
     static MemoryManager memoryManager;
+
+    // tracking CPU ticks
+    static int idleCpuTicks;
+    static int activeCpuTicks;
+    static int totalCpuTicks;
 
     static void initializeCores() {
         availableCores.clear();
@@ -695,6 +769,7 @@ private:
                 }
                 if (processQueue.isEmpty())
                 {
+                    idleCpuTicks++;
                     continue;
                 }
 
@@ -742,6 +817,7 @@ private:
                             processPtr->currentLine++;
                         }
                         timeSpent++;
+                        ++activeCpuTicks;
                     }
 
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -867,6 +943,21 @@ public:
         std::unique_lock<std::mutex> lock(startStopMtx);
         return runningWorkersCount;
     }
+    // Getter functions for CPU ticks
+    static int getIdleCpuTicks()
+    {
+        return idleCpuTicks;
+    }
+
+    static int getActiveCpuTicks()
+    {
+        return activeCpuTicks;
+    }
+
+    static int getTotalCpuTicks()
+    {
+        return idleCpuTicks + activeCpuTicks;
+    }
 };
 
 bool FCFSScheduler::useRoundRobin = false;
@@ -988,4 +1079,14 @@ int FCFSScheduler::currentCpuId = 1;
 int FCFSScheduler::runningWorkersCount = 0;
 int ProcessQueue::quantumSplice = 4;
 int FCFSScheduler::delayPerExec = 0;
+
+// Initialize static variables
+int FCFSScheduler::idleCpuTicks = 0;
+int FCFSScheduler::activeCpuTicks = 0;
+int FCFSScheduler::totalCpuTicks = 0;
+
+// Initialize static members outside the class definition
+int MemoryManager::pagedInCount = 0;
+int MemoryManager::pagedOutCount = 0;
+
 #endif

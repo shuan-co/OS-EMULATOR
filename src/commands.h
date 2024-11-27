@@ -618,15 +618,30 @@ public:
         cout << "| PROCESSES-SMI V01.00 Driver Version: 01.100 |" << endl;
         cout << "-----------------------------------------------" << endl;
         cout << "CPU-Util: " << (static_cast<double>(FCFSScheduler::getRunningWorkersCount()) / FCFSScheduler::getCPUThreads()) * 100 << "%" << endl;
-        cout << "Memory Usage: " << FCFS_H::MemoryManager::getMemoryUsed() << "MiB / " << FCFS_H::MemoryManager::getOverallMemory() << "MiB" << endl;
+        cout << "Memory Usage: " << FCFS_H::MemoryManager::getMemoryUsed() << "KiB / " << FCFS_H::MemoryManager::getOverallMemory() << "KiB" << endl;
         cout << "Memory-Util: " << (static_cast<double>(FCFS_H::MemoryManager::getMemoryUsed()) / FCFS_H::MemoryManager::getOverallMemory()) * 100 << "%" << endl;
 
         cout << "===============================================" << endl;
         cout << "Running Processes and Memory Usage:" << endl;
         cout << "-----------------------------------------------" << endl;
         for (const auto& process : FCFS_H::MemoryManager::getUniqueRunningProcesses()){
-            cout << process->name << " " << process->mem << "MiB" << endl;
+            cout << process->name << " " << process->mem << "KiB" << endl;
         }
+        cout << "-----------------------------------------------" << endl;
+    }
+
+    static void vmStat(const std::string& args, ProgramState& state){
+        cout << "-----------------------------------------------" << endl;
+        cout << "| VMSTAT V01.00 Driver Version: 01.100        |" << endl;
+        cout << "-----------------------------------------------" << endl;
+        cout << "Total Memory: " << FCFS_H::MemoryManager::getOverallMemory() << " KiB" << endl;
+        cout << "Used Memory: " << FCFS_H::MemoryManager::getMemoryUsed() << " KiB" << endl;
+        cout << "Free Memory: " << FCFS_H::MemoryManager::getOverallMemory() - FCFS_H::MemoryManager::getMemoryUsed() << " KiB" << endl;
+        cout << "Idle CPU Ticks: " << FCFSScheduler::getIdleCpuTicks() << endl;
+        cout << "Active CPU Ticks: " << FCFSScheduler::getActiveCpuTicks() << endl;
+        cout << "Total CPU Ticks: " << FCFSScheduler::getTotalCpuTicks() << endl;
+        cout << "Num Paged In: " << FCFS_H::MemoryManager::getPagedInCount() << endl;
+        cout << "Num Paged Out: " << FCFS_H::MemoryManager::getPagedOutCount() << endl;
         cout << "-----------------------------------------------" << endl;
     }
 
@@ -647,6 +662,7 @@ public:
             {"process-smi", Commands::processSMI},
             {"processes-smi", Commands::processesSMI},
             {"debug-scheduler", Commands::debugSchedulerTest},
+            {"vmstat", Commands::vmStat},
             // Marquee Console Sampler
             {"marquee-console", Commands::marqueeConsole},
             // Manual Exception, for Debugging / Checking Error Handling in Clock Cycle
