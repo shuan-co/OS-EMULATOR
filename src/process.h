@@ -29,6 +29,7 @@ struct Process
     int mem;
     int memLocStart;
     int memLocEnd;
+    std::vector<std::int> pages;
 
     std::string getTimestamp() const
     {
@@ -233,14 +234,26 @@ public:
 
     static int getMemoryUsed()
     {
+        
         int memoryUsed = 0;
-        for (size_t i = 0; i < memory.size(); ++i)
-        {
-            if (memory[i] != nullptr)
+        if (mode == 0){
+            for (size_t i = 0; i < memory.size(); ++i)
             {
-                memoryUsed++;
+                if (memory[i] != nullptr)
+                {
+                    memoryUsed++;
+                }
+            }
+        } else if (mode == 1){
+            for (size_t i = 0; i < memory.size(); ++i)
+            {
+                if (memory[i] != nullptr)
+                {
+                    memoryUsed += MEMORY_PER_FRAME;
+                }
             }
         }
+
         return memoryUsed;
     }
 
@@ -300,37 +313,37 @@ public:
     {
         std::unique_lock<std::mutex> lock(memMutex);
 
-        // 
+        // Check if the process is already in memory
+        for (size_t i = 0; i < memory.size(); ++i)
+        {
+            if (memory[i] != nullptr && memory[i]->pid == process.pid)
+            {
+                // Process already in memory, return its current memory locations
+                return {memory[i]->memLocStart, memory[i]->memLocEnd};
+            }
+        }
+
+        // Check if the process is in swap space
+        std::string swapFileName = "./swap/" + std::to_string(process.pid) + ".csopesy";
+        std::ifstream swapFile(swapFileName);
+
+        if (swapFile.good())
+        {
+            swapFile.close();
+            if (std::remove(swapFileName.c_str()) != 0)
+            {
+                std::cerr << "Error deleting swap file for process " << process.pid << ": " << swapFileName << std::endl;
+            }
+            Sleep(100); // Simulated Delay
+            // Return dummy memory locations since process is not in memory but was in swap space
+            return {-1, -1};
+        }
+
+        int requiredMemory = process.mem;
+        int availableMemory = totalFreeMemory();
+        int requiredFrames = requiredMemory / MEMORY_PER_FRAME;
         if (mode == 0)
         {
-            // Check if the process is already in memory
-            for (size_t i = 0; i < memory.size(); ++i)
-            {
-                if (memory[i] != nullptr && memory[i]->pid == process.pid)
-                {
-                    // Process already in memory, return its current memory locations
-                    return {memory[i]->memLocStart, memory[i]->memLocEnd};
-                }
-            }
-
-            // Check if the process is in swap space
-            std::string swapFileName = "./swap/" + std::to_string(process.pid) + ".csopesy";
-            std::ifstream swapFile(swapFileName);
-
-            if (swapFile.good())
-            {
-                swapFile.close();
-                if (std::remove(swapFileName.c_str()) != 0)
-                {
-                    std::cerr << "Error deleting swap file for process " << process.pid << ": " << swapFileName << std::endl;
-                }
-                Sleep(100); // Simulated Delay
-                // Return dummy memory locations since process is not in memory but was in swap space
-                return {-1, -1};
-            }
-
-            int requiredMemory = process.mem;
-            int availableMemory = totalFreeMemory();
 
             // If there is not enough free memory, try to remove processes
             if (availableMemory < requiredMemory)
@@ -387,9 +400,60 @@ public:
             }
 
             return {process.memLocStart, process.memLocEnd};
-        } else {
+        } else if (mode == 1) {
+            // If there is not enough free memory, try to remove processes
+            if (availableMemory < requiredMemory)
+            {
+                // Get processes to remove based on available memory
+                std::vector<Process *> processesToRemove = getOldestMemoryInProcess(requiredFrames);
 
+                if (processesToRemove.empty())
+                {
+                    return {-1, -1}; // Not enough memory even after considering removable processes
+                }
 
+                // Write processes to swap space before freeing memory
+                for (Process *processToRemove : processesToRemove)
+                {
+                    writeToSwapFile(processToRemove); // Write to swap before removing
+                    freeMemory(processToRemove->pid); // Remove from memory
+                }
+
+                // Now we are certain that there is enough memory for the new process
+            }
+
+            // Non-contiguous memory allocation (page/frame allocation)
+            int allocatedFrames = 0;
+            std::vector<int> allocatedPages;
+
+            for (int i = 0; i < memory.size(); ++i)
+            {
+                if (memory[i] == nullptr) // Check if the frame is free
+                {
+                    allocatedFrames++;
+                    allocatedPages.push_back(i); // Store the allocated frame (page)
+                    memory[i] = &process;        // Store the process pointer in the allocated frame
+
+                    if (allocatedFrames == requiredFrames)
+                    {
+                        process.memLocStart = allocatedPages[0];
+                        process.memLocEnd = allocatedPages.back();
+                        processCount++;
+                        break;
+                    }
+                }
+            }
+
+            // If we couldn't allocate enough frames
+            if (allocatedFrames < requiredFrames)
+            {
+                // Free any allocated pages before returning failure
+                for (int page : allocatedPages)
+                {
+                    memory[page] = nullptr;
+                }
+                return {-1, -1}; // Memory allocation failed
+            }
         }
     }
 
@@ -589,6 +653,7 @@ public:
         else
         {
             mode = 1; // Paging Mode
+            memory.resize(MAX_OVERALL_MEM / MEMORY_PER_FRAME); // Resize per frame representation
         }
     }
 };
