@@ -770,6 +770,7 @@ private:
                 if (processQueue.isEmpty())
                 {
                     idleCpuTicks++;
+                    Sleep(500);
                     continue;
                 }
 
