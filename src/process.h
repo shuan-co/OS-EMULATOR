@@ -828,7 +828,7 @@ private:
 
                 if (timeSpent == processQueue.quantumSplice)
                 {
-                    memoryManager.logMemorySnapshot();
+                    //memoryManager.logMemorySnapshot();
                 }
 
                 // Decrement runningWorkersCount as the process has finished or yielded
