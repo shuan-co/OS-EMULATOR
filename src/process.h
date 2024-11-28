@@ -729,6 +729,8 @@ public:
 
 class FCFSScheduler
 {
+public:
+    static bool stopTicks;
 private:
     static ProcessQueue processQueue;
     static std::vector<std::thread> workerThreads;
@@ -959,6 +961,17 @@ public:
     {
         return idleCpuTicks + activeCpuTicks;
     }
+
+    static void incrementIdleTicks(int num) {
+        if (!stopTicks) {  
+            idleCpuTicks += num;
+        }
+    }
+
+    static void setStopTicks(bool stop) {
+        stopTicks = stop;
+    }
+
 };
 
 bool FCFSScheduler::useRoundRobin = false;
@@ -973,6 +986,7 @@ int MemoryManager::MEMORY_PER_FRAME;
 int MemoryManager::mode;
 std::vector<Process *> MemoryManager::memory;
 std::vector<Process *> MemoryManager::runningProcesses;
+bool FCFSScheduler::stopTicks = false;
 
 class ProcessManager
 {

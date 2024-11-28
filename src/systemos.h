@@ -11,6 +11,7 @@
 // Operating System Libraries
 #include "interfaces.h"
 #include "current_state.h"
+#include "process.h"
 
 using namespace std;
 
@@ -44,6 +45,10 @@ public:
         if (type == "cmd")
         {
             string input = getInput();
+
+            if (input == "scheduler-test" || input == "debug-scheduler") {
+                FCFSScheduler::setStopTicks(true); 
+            }
 
             if (input == "exit")
             {
