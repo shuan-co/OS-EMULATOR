@@ -980,7 +980,8 @@ public:
     static int getRunningWorkersCount()
     {
         std::unique_lock<std::mutex> lock(startStopMtx);
-        return runningWorkersCount;
+        int processesInMemory = MemoryManager::getUniqueRunningProcesses().size();
+        return processesInMemory;
     }
     // Getter functions for CPU ticks
     static int getIdleCpuTicks()
