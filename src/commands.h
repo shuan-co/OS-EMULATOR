@@ -289,7 +289,7 @@ public:
                 if (configSettings.scheduler == "rr"){
                     FCFSScheduler::setRoundRobin(true);
                 }
-            } else if (key == "quantum-cycles") {
+            } else if (key == "quantum-cycles" && configSettings.scheduler == "rr") {
                 iss >> configSettings.quantumCycles;
                 if (configSettings.quantumCycles < 1 || configSettings.quantumCycles > std::numeric_limits<int>::max()) {
                     std::cout << "Error: quantum-cycles must be between 1 and 2^32\n";
