@@ -702,7 +702,7 @@ public:
 
                 // Calculate memory occupied by this process
                 int freeSpace = 0;
-                for (size_t i = memory.size(); i < memory.size(); ++i)
+                for (size_t i = 0; i < memory.size(); ++i)
                 {
                     if (memory[i] == process)
                     {
