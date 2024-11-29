@@ -403,8 +403,7 @@ public:
 
                 if (processesToRemove.empty())
                 {
-                   // Not enough memory even after considering removable processes
-                    throw std::runtime_error("Not enough memory even after considering removable processes");
+                    return {-1, -1}; // Not enough memory even after considering removable processes
                 }
 
                 // Write processes to swap space before freeing memory
@@ -461,7 +460,7 @@ public:
 
                 if (processesToRemove.empty())
                 {
-                    throw std::runtime_error("Not enough memory even after considering removable processes");
+                    return {-1, -1}; // Not enough memory even after considering removable processes
                 }
 
                 // Write processes to swap space before freeing memory
@@ -831,6 +830,7 @@ private:
                 }
 
                 // Increment runningWorkersCount as this thread is now running a process
+                ++runningWorkersCount;
             }
 
             // Try to allocate memory for the process
@@ -841,7 +841,6 @@ private:
                 processPtr->memLocStart = memoryLocations.first; // Set the memory start location
                 processPtr->memLocEnd = memoryLocations.second;  // Set the memory end location
                 memoryManager.addRunningProcess(processPtr);
-                ++runningWorkersCount;
                 int timeSpent = 0;
                 while (processPtr->currentLine < processPtr->totalLines &&
                     (!useRoundRobin || timeSpent < processQueue.quantumSplice))
@@ -894,6 +893,7 @@ private:
             }
             catch (const std::runtime_error& e)
             {
+                printf("Error: %s\n", e.what());
                 // If memory allocation fails, move the process back to the queue
                 processQueue.moveToBack(processPtr);
                 // Decrement runningWorkersCount since we didn't execute the process
@@ -902,6 +902,7 @@ private:
                     availableCores.push_back(processPtr->cpu);
                     std::sort(availableCores.begin(), availableCores.end());
                     processPtr->cpu = -1;
+                    --runningWorkersCount;
                 }
             }
         }
