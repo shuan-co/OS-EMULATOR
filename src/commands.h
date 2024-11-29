@@ -256,6 +256,11 @@ public:
 
     static void initialize(const std::string& args, ProgramState& state)
     {
+        if (FCFSScheduler::stopTicks == false)
+        {
+            FCFSScheduler::calculateIdleCPUTicks(false);
+        }
+
         std::ifstream configFile("config.txt");
         if (!configFile.is_open()) {
             std::cout << "Error: Unable to open config.txt\n";
@@ -631,6 +636,11 @@ public:
     }
 
     static void vmStat(const std::string& args, ProgramState& state){
+        if (FCFSScheduler::stopTicks == false)
+        {
+            FCFSScheduler::calculateIdleCPUTicks(false);
+        }
+
         cout << "-----------------------------------------------" << endl;
         cout << "| VMSTAT V01.00 Driver Version: 01.100        |" << endl;
         cout << "-----------------------------------------------" << endl;

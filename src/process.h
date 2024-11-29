@@ -782,6 +782,7 @@ private:
     static int idleCpuTicks;
     static int activeCpuTicks;
     static int totalCpuTicks;
+    static int cpuStartTime;
 
     static void initializeCores() {
         availableCores.clear();
@@ -1007,6 +1008,31 @@ public:
         stopTicks = stop;
     }
 
+    static void initIdleCPUTicks(){
+        cpuStartTime = std::time(nullptr);
+    }
+
+    static void calculateIdleCPUTicks(bool stop)
+    {
+        stopTicks = stop;
+
+        // Current time in seconds since the epoch
+        auto currentTime = std::time(nullptr);
+
+        // Calculate elapsed time in milliseconds
+        int elapsedSeconds = currentTime - cpuStartTime; // Time elapsed since last calculation
+        int elapsedMs = elapsedSeconds * 1000;           // Convert to milliseconds
+
+        if (elapsedMs >= 500)
+        {
+            // Increment idle ticks for every 500ms elapsed
+            int increments = elapsedMs / 500;        // Number of 500ms intervals
+            idleCpuTicks += increments * numWorkers; // Increment by numWorkers * increments
+
+            // Update cpuStartTime to the current time minus leftover milliseconds
+            cpuStartTime = std::time(nullptr) - (elapsedMs % 500) / 1000;
+        }
+    }
 };
 
 bool FCFSScheduler::useRoundRobin = false;
@@ -1129,6 +1155,7 @@ int FCFSScheduler::currentCpuId = 1;
 int FCFSScheduler::runningWorkersCount = 0;
 int ProcessQueue::quantumSplice = 4;
 int FCFSScheduler::delayPerExec = 0;
+int FCFSScheduler::cpuStartTime = 0;
 
 // Initialize static variables
 int FCFSScheduler::idleCpuTicks = 0;

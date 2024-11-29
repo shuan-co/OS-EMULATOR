@@ -47,7 +47,9 @@ public:
             string input = getInput();
 
             if (input == "scheduler-test" || input == "debug-scheduler") {
-                FCFSScheduler::setStopTicks(true); 
+                if (FCFSScheduler::stopTicks == false){
+                    FCFSScheduler::calculateIdleCPUTicks(true);
+                }
             }
 
             if (input == "exit")

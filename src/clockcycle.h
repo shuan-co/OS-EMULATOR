@@ -44,7 +44,7 @@ public:
         // Main CPU Cycle
         while (true)
         {
-            FCFSScheduler::incrementIdleTicks(numCpu);
+            FCFSScheduler::initIdleCPUTicks();
             // Error Handling
             try
             {
