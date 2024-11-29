@@ -394,7 +394,7 @@ public:
 
         if (mode == 0)
         {
-
+            
             // If there is not enough free memory, try to remove processes
             if (availableMemory < requiredMemory)
             {
@@ -655,34 +655,72 @@ public:
 
         std::sort(sortedProcesses.begin(), sortedProcesses.end(), [](Process *a, Process *b)
                   { return a->timeStartedInMemory < b->timeStartedInMemory; });
-
-        // Iterate through sorted processes to find enough memory to free
-        for (Process *process : sortedProcesses)
-        {
-            // Skip running processes
-            if (std::find(runningProcesses.begin(), runningProcesses.end(), process) != runningProcesses.end())
+        
+        if (mode == 0){
+            // Contigious Memory Mode
+            // Iterate through sorted processes to find enough memory to free
+            for (Process *process : sortedProcesses)
             {
-                continue;
-            }
-
-            processesToRemove.push_back(process);
-
-            // Calculate memory occupied by this process
-            int freeSpace = 0;
-            for (size_t i = process->memLocStart; i <= process->memLocEnd; ++i)
-            {
-                if (memory[i] == process)
+                if (availableMemory >= requiredMemory)
                 {
-                    freeSpace++;
+                    break;
+                }
+                // Skip running processes
+                if (std::find(runningProcesses.begin(), runningProcesses.end(), process) != runningProcesses.end())
+                {
+                    // if encounter roadblock non contigious
+                    availableMemory = 0;
+                    continue;
+                }
+
+                processesToRemove.push_back(process);
+                for (size_t i = 0; i < memory.size(); ++i)
+                {
+                    if (std::find(runningProcesses.begin(), runningProcesses.end(), process) != runningProcesses.end()){
+                        availableMemory = 0;
+                        processesToRemove.pop_back();
+                        break;
+                    }
+                    if (memory[i] == process)
+                    {
+                        availableMemory++;
+                    }
+
+                    if (availableMemory >= requiredMemory)
+                    {
+                        break;
+                    }
                 }
             }
-
-            availableMemory += freeSpace;
-
-            // Stop if enough memory is freed
-            if (availableMemory >= requiredMemory)
+        } else if (mode == 1){
+            // Iterate through sorted processes to find enough memory to free
+            for (Process *process : sortedProcesses)
             {
-                break;
+                // Skip running processes
+                if (std::find(runningProcesses.begin(), runningProcesses.end(), process) != runningProcesses.end())
+                {
+                    continue;
+                }
+
+                processesToRemove.push_back(process);
+
+                // Calculate memory occupied by this process
+                int freeSpace = 0;
+                for (size_t i = memory.size(); i < memory.size(); ++i)
+                {
+                    if (memory[i] == process)
+                    {
+                        freeSpace++;
+                    }
+                }
+
+                availableMemory += freeSpace;
+
+                // Stop if enough memory is freed
+                if (availableMemory >= requiredMemory)
+                {
+                    break;
+                }
             }
         }
 
