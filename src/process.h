@@ -831,15 +831,23 @@ private:
 
                 // Increment runningWorkersCount as this thread is now running a process
                 ++runningWorkersCount;
+                
+                    std::pair<int, int> memoryLocations = memoryManager.addToMemory(*processPtr);
+                    if (memoryLocations.first == -1 || memoryLocations.second == -1)
+                    {
+                        processQueue.moveToBack(processPtr);
+                        processPtr->cpu = -1;
+                        --runningWorkersCount;
+                        continue;
+                    }
+                    processPtr->memLocStart = memoryLocations.first; // Set the memory start location
+                    processPtr->memLocEnd = memoryLocations.second;  // Set the memory end location
+
             }
 
             // Try to allocate memory for the process
             try
             {
-                
-                std::pair<int, int> memoryLocations = memoryManager.addToMemory(*processPtr);
-                processPtr->memLocStart = memoryLocations.first; // Set the memory start location
-                processPtr->memLocEnd = memoryLocations.second;  // Set the memory end location
                 memoryManager.addRunningProcess(processPtr);
                 int timeSpent = 0;
                 while (processPtr->currentLine < processPtr->totalLines &&
